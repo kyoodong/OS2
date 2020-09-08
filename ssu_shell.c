@@ -10,6 +10,7 @@
 #define MAX_TOKEN_SIZE 64
 #define MAX_NUM_TOKENS 64
 
+void process(char **tokens);
 void run_op(const char *op, char **params);
 
 /* Splits the string by space and returns the array of tokens
@@ -57,7 +58,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	while(1) {			
+	while(1) {
 		/* BEGIN: TAKING INPUT */
 		bzero(line, sizeof(line));
 		if(argc == 2) { // batch mode
@@ -70,7 +71,7 @@ int main(int argc, char* argv[]) {
 			scanf("%[^\n]", line);
 			getchar();
 		}
-		printf("Command entered: %s (remove this debug output later)\n", line);
+		//printf("Command entered: %s (remove this debug output later)\n", line);
 		/* END: TAKING INPUT */
 
 		line[strlen(line)] = '\n'; //terminate with new line
@@ -82,20 +83,9 @@ int main(int argc, char* argv[]) {
 		//	printf("found token %s (remove this debug output later)\n", tokens[i]);
 		//}
 
-		struct stat sb;
-		
-		// 명령어가 존재하는 경우
-		if (stat(tokens[0], &sb) == 0) {
-			run_op(tokens[0], tokens);
-		} else {
-			char buffer[MAX_INPUT_SIZE];
-			sprintf(buffer, "/bin/%s", tokens[0]);
 
-			// /bin에 명령어가 존재하는 경우
-			if (stat(buffer, &sb) == 0) {
-				run_op(buffer, tokens);
-			}
-		}
+		process(tokens);
+
 
 		// Freeing the allocated memory	
 		for(i=0;tokens[i]!=NULL;i++){
@@ -105,6 +95,47 @@ int main(int argc, char* argv[]) {
 
 	}
 	return 0;
+}
+
+void process(char **tokens) {
+	struct stat sb;
+	
+	// ttop 명령어
+	if (!strcmp(tokens[0], "ttop")) {
+
+		return;
+	}
+
+	// pps 명령어
+	if (!strcmp(tokens[0], "pps")) {
+
+		return;
+	}
+
+	// 명령어가 존재하는 경우
+	if (stat(tokens[0], &sb) == 0) {
+		run_op(tokens[0], tokens);
+		return;
+	}
+	char buffer[MAX_INPUT_SIZE];
+	sprintf(buffer, "/bin/%s", tokens[0]);
+
+	// /bin에 명령어가 존재하는 경우
+	// Linux 내장 명령어
+	if (stat(buffer, &sb) == 0) {
+		run_op(buffer, tokens);
+		return;
+	}
+	
+}
+
+
+void ttop() {
+
+}
+
+void pps() {
+
 }
 
 void run_op(const char *op, char **params) {
