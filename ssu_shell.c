@@ -80,9 +80,6 @@ int main(int argc, char* argv[]) {
 		tokens = tokenize(line);
    
        //do whatever you want with the commands, here we just print them
-
-
-
 		process(tokens);
 
 
@@ -102,6 +99,8 @@ void process(char **tokens) {
 
 	for(param_size=0;tokens[param_size]!=NULL;param_size++);
 
+	if (param_size == 0)
+		return;
 	
 	// ttop 명령어
 	if (!strcmp(tokens[0], "ttop")) {
