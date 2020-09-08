@@ -11,7 +11,7 @@
 #define MAX_NUM_TOKENS 64
 
 void process(char **tokens);
-void run_op(const char *op, char **params);
+void run_op(const char *op, char **params, int param_size);
 
 /* Splits the string by space and returns the array of tokens
 *
@@ -42,6 +42,8 @@ char **tokenize(char *line)
   tokens[tokenNo] = NULL ;
   return tokens;
 }
+
+
 
 
 int main(int argc, char* argv[]) {
@@ -79,9 +81,6 @@ int main(int argc, char* argv[]) {
    
        //do whatever you want with the commands, here we just print them
 
-		//for(i=0;tokens[i]!=NULL;i++){
-		//	printf("found token %s (remove this debug output later)\n", tokens[i]);
-		//}
 
 
 		process(tokens);
@@ -99,6 +98,10 @@ int main(int argc, char* argv[]) {
 
 void process(char **tokens) {
 	struct stat sb;
+	int param_size;
+
+	for(param_size=0;tokens[param_size]!=NULL;param_size++);
+
 	
 	// ttop 명령어
 	if (!strcmp(tokens[0], "ttop")) {
@@ -112,21 +115,18 @@ void process(char **tokens) {
 		return;
 	}
 
-	// 명령어가 존재하는 경우
-	if (stat(tokens[0], &sb) == 0) {
-		run_op(tokens[0], tokens);
-		return;
-	}
 	char buffer[MAX_INPUT_SIZE];
 	sprintf(buffer, "/bin/%s", tokens[0]);
 
 	// /bin에 명령어가 존재하는 경우
 	// Linux 내장 명령어
 	if (stat(buffer, &sb) == 0) {
-		run_op(buffer, tokens);
+		run_op(buffer, tokens, param_size);
 		return;
 	}
 	
+	run_op(tokens[0], tokens, param_size);
+	return;
 }
 
 
@@ -138,7 +138,8 @@ void pps() {
 
 }
 
-void run_op(const char *op, char **params) {
+void run_op(const char *op, char **params, int param_size) {
+	int background_flag;
 	char buffer[MAX_INPUT_SIZE];
 	
 	pid_t pid = fork();
@@ -153,8 +154,8 @@ void run_op(const char *op, char **params) {
 	if (pid == 0) {
 		execv(op, params);
 	}
+
 	// 부모 프로세스
 	int status;
 	wait(&status);
-       
 }
