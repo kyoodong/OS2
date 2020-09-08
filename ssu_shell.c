@@ -140,6 +140,7 @@ void pps() {
 void run_op(const char *op, char **params, int param_size) {
 	int background_flag;
 	char buffer[MAX_INPUT_SIZE];
+	int status;
 	
 	pid_t pid = fork();
 
@@ -151,10 +152,16 @@ void run_op(const char *op, char **params, int param_size) {
 
 	// 자식 프로세스
 	if (pid == 0) {
-		execv(op, params);
+		status = execv(op, params);
+		if (status < 0) {
+			printf("SSUShell : Incorrect command\n");
+		}
+		return;
 	}
 
 	// 부모 프로세스
-	int status;
 	wait(&status);
+
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+		printf("SSUShell : Incorrect command\n");
 }
