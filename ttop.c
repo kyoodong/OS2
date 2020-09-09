@@ -94,12 +94,60 @@ int main(int argc, char **argv) {
 					break;
 
 				default:
-					printf("%c\n", status);
+					//printf("%c\n", status);
 					break;
 			}
+			fclose(fp);
 			process_count++;
 		}
 	}
+
+	int cpu_user;
+	int cpu_nice;
+	int cpu_system;
+	int cpu_idle;
+	int cpu_iowait;
+	int cpu_irq;
+	int cpu_softirq;
+	int cpu_steal;
+	int cpu_total;
+
+	// CPU 사용량
+	fp = fopen("/proc/stat", "r");
+	fscanf(fp, "%*s %d %d %d %d %d %d %d %d",
+			&cpu_user, &cpu_nice, &cpu_system, &cpu_idle,
+			&cpu_iowait, &cpu_irq, &cpu_softirq, &cpu_steal);
+	fclose(fp);
+
+	cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal;
+
+	// 메모리 사용량
+	int mem_total;
+	int mem_free;
+	int mem_available;
+	int mem_buffer;
+	int mem_cache;
+	int swap_total;
+	int swap_free;
+
+	fp = fopen("/proc/meminfo", "r");
+	fscanf(fp, "%*s %d kB", &mem_total);
+	fscanf(fp, "%*s %d kB", &mem_free);
+	fscanf(fp, "%*s %d kB", &mem_available);
+	fscanf(fp, "%*s %d kB", &mem_buffer);
+	fscanf(fp, "%*s %d kB", &mem_cache);
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %d kB", &swap_total);
+	fscanf(fp, "%*s %d kB", &swap_free);
+	fclose(fp);
 
 	printf("top - %d:%d:%d up %d:%d, %d user, load average: %.2f, %.2f, %.2f\n",
 			tm.tm_hour,	// 시
@@ -117,6 +165,22 @@ int main(int argc, char **argv) {
 			sleeping_process_count,
 			stopped_process_count,
 			zombie_process_count);
+	printf("%%Cpu(s)  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f, st\n",
+			(float) cpu_user / cpu_total * 100,
+			(float) cpu_system / cpu_total * 100,
+			(float) cpu_nice / cpu_total * 100,
+			(float) cpu_idle / cpu_total * 100,
+			(float) cpu_iowait / cpu_total * 100,
+			(float) cpu_irq / cpu_total * 100,
+			(float) cpu_softirq / cpu_total * 100,
+			(float) cpu_steal / cpu_total * 100
+	);
+	printf("KiB Mem : %d total,  %d free,  %d used,  %d buff/cache\n",
+			mem_total, mem_free, mem_total - mem_available, mem_buffer + mem_cache);
+	printf("KiB Swap:  %d total,  %d free, %d used,  %d avail Mem\n",
+			swap_total, swap_free, swap_total - swap_free, mem_available);
+
+	system("top");
 	exit(0);
 }
 
