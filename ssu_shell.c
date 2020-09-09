@@ -152,11 +152,11 @@ void run_op(const char *op, char **params, int param_size) {
 
 	// 자식 프로세스
 	if (pid == 0) {
-		status = execv(op, params);
+		status = execvp(op, params);
 		if (status < 0) {
 			printf("SSUShell : Incorrect command\n");
 		}
-		return;
+		exit(1);
 	}
 
 	// 부모 프로세스
