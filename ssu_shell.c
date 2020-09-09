@@ -11,7 +11,11 @@
 #define MAX_NUM_TOKENS 64
 
 void process(char **tokens);
-void run_op(const char *op, char **params, int param_size);
+void run_op(const char *op, char **params, int input_redirection, int output_redirection, int input_pipe_fd, int output_pipe_fd);
+char **has_pipe(char **tokens);
+
+
+
 
 /* Splits the string by space and returns the array of tokens
 *
@@ -42,8 +46,6 @@ char **tokenize(char *line)
   tokens[tokenNo] = NULL ;
   return tokens;
 }
-
-
 
 
 int main(int argc, char* argv[]) {
@@ -93,14 +95,70 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
+/**
+  * 명령어를 처리하는 함수
+  * @param tokens 명령어 토큰
+  */
 void process(char **tokens) {
 	struct stat sb;
 	int param_size;
+	char **p = tokens;
+	// 파이프 파일 디스크립터
+	int pipe_fd[2];
 
-	for(param_size=0;tokens[param_size]!=NULL;param_size++);
+	// 이 전 명령어에 파이프가 사용되었는지 여부
+	int prev_pipe = 0;
 
-	if (param_size == 0)
-		return;
+	// 현재 명령어에 파이프가 사용되어야 하는지 여부
+	int cur_pipe = 0;
+
+	int input_pipe_fd = -1, output_pipe_fd = -1;
+
+	while (1) {
+		p = has_pipe(tokens);
+
+		// 파이프가 있음
+		if (p != NULL) {
+			if (pipe(pipe_fd) < 0) {
+				fprintf(stderr, "pipe error\n");
+				exit(1);
+			}
+
+			output_pipe_fd = pipe_fd[1];
+			*p = NULL;
+			cur_pipe = 1;
+		}
+
+		//char buffer[MAX_INPUT_SIZE];
+		//sprintf(buffer, "/bin/%s", tokens[0]);
+	
+		// /bin에 명령어가 존재하는 경우
+		// Linux 내장 명령어
+		//if (stat(buffer, &sb) == 0) {
+		//	run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
+		//} else {
+		run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
+		//}
+
+		prev_pipe = cur_pipe;
+		cur_pipe = 0;
+
+		if (input_pipe_fd != -1) {
+			close(input_pipe_fd);
+			input_pipe_fd = -1;
+		}
+		
+		if (output_pipe_fd != -1) {
+			close(output_pipe_fd);
+			output_pipe_fd = -1;
+		}
+		
+		if (p == NULL)
+			break;
+
+		input_pipe_fd = pipe_fd[0];
+		tokens = ++p;
+	}
 	
 	// ttop 명령어
 	if (!strcmp(tokens[0], "ttop")) {
@@ -114,18 +172,16 @@ void process(char **tokens) {
 		return;
 	}
 
-	char buffer[MAX_INPUT_SIZE];
-	sprintf(buffer, "/bin/%s", tokens[0]);
-
-	// /bin에 명령어가 존재하는 경우
-	// Linux 내장 명령어
-	if (stat(buffer, &sb) == 0) {
-		run_op(buffer, tokens, param_size);
-		return;
-	}
-	
-	run_op(tokens[0], tokens, param_size);
 	return;
+}
+
+char **has_pipe(char **tokens) {
+	while (*tokens != NULL) {
+		if (!strcmp(*tokens, "|"))
+			return tokens;
+		tokens++;
+	}
+	return NULL;
 }
 
 
@@ -137,7 +193,7 @@ void pps() {
 
 }
 
-void run_op(const char *op, char **params, int param_size) {
+void run_op(const char *op, char **params, int input_redirection, int output_redirection, int input_pipe_fd, int output_pipe_fd) {
 	int background_flag;
 	char buffer[MAX_INPUT_SIZE];
 	int status;
@@ -152,9 +208,18 @@ void run_op(const char *op, char **params, int param_size) {
 
 	// 자식 프로세스
 	if (pid == 0) {
+		// 이전 명령어에 파이프가 있었음
+		if (input_redirection) {
+			// 입력에 파이프 등록
+			dup2(input_pipe_fd, 0);
+		}
+
+		if (output_redirection) {
+			dup2(output_pipe_fd, 1);
+		}
 		status = execvp(op, params);
 		if (status < 0) {
-			printf("SSUShell : Incorrect command\n");
+			fprintf(stderr, "SSUShell : Incorrect command\n");
 		}
 		exit(1);
 	}

@@ -11,6 +11,7 @@ char buffer[1024];
 
 
 int main(int argc, char **argv) {
+
 	// 현재 시간 구하기
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
@@ -176,11 +177,10 @@ int main(int argc, char **argv) {
 			(float) cpu_steal / cpu_total * 100
 	);
 	printf("KiB Mem : %d total,  %d free,  %d used,  %d buff/cache\n",
-			mem_total, mem_free, mem_total - mem_available, mem_buffer + mem_cache);
+			mem_total, mem_free, mem_total - mem_free, mem_buffer + mem_cache);
 	printf("KiB Swap:  %d total,  %d free, %d used,  %d avail Mem\n",
 			swap_total, swap_free, swap_total - swap_free, mem_available);
 
-	system("top");
 	exit(0);
 }
 
