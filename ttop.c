@@ -6,7 +6,9 @@
 #include <dirent.h>
 #include <string.h>
 #include <curses.h>
+#include <signal.h>
 
+#define MIN_INTERVAL 1
 
 struct process {
 	pid_t pid;
@@ -37,6 +39,7 @@ struct user {
 void data_refresh();
 
 
+struct sigaction act;
 struct user userlist[128];
 int user_process_count;
 struct node *head, *tail;
@@ -285,8 +288,19 @@ void print_sub() {
 
 }
 
+void sig_handler(int signo) {
+	exit(1);
+}
+
+
 int main(int argc, char **argv) {
 	atexit(window_clear);
+	act.sa_handler = sig_handler;
+	sigemptyset(&act.sa_mask);
+
+	sigaction(SIGINT, &act, NULL);
+	sigaction(SIGABRT, &act, NULL);
+	sigaction(SIGSEGV, &act, NULL);
 	x = 0;
 	y = 7;
 
@@ -295,7 +309,27 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+	cbreak();
+	noecho();
+
 	getmaxyx(stdscr, height, width);
+
+	fp = fopen("/etc/passwd", "r");
+	if (fp == NULL) {
+		fprintf(stderr, "/etc/passwd open error\n");
+		exit(1);
+	}
+
+	char buf[64];
+	int uid;
+	while (fscanf(fp, "%[^:]:%*[^:]:%d", buf, &uid) == 2) {
+		userlist[user_count].uid = uid;
+		strncpy(userlist[user_count].name, buf, 64);
+		user_count++;
+		fscanf(fp, "%*[^\n]");
+		fgetc(fp);
+	}
+	fclose(fp);
 
 	data_refresh();
 
@@ -338,35 +372,18 @@ int main(int argc, char **argv) {
 }
 
 
-
 void data_refresh() {
 	// 현재 시간 구하기
 	t = time(NULL);
 	tm = *localtime(&t);
 
-	if (t - last_update_time < 200)
+	if (t - last_update_time < MIN_INTERVAL)
 		return;
 
 	clear_non_visited_nodes();
 	clear_visit();
 
 	last_update_time = t;
-	fp = fopen("/etc/passwd", "r");
-	if (fp == NULL) {
-		fprintf(stderr, "/etc/passwd open error\n");
-		exit(1);
-	}
-
-	char buf[64];
-	int uid;
-	while (fscanf(fp, "%[^:]:%*[^:]:%d", buf, &uid) == 2) {
-		userlist[user_count].uid = uid;
-		strncpy(userlist[user_count].name, buf, 64);
-		user_count++;
-		fscanf(fp, "%*[^\n]");
-		fgetc(fp);
-	}
-	fclose(fp);
 
 	// 부팅 시간 구하기
 	fp = fopen("/proc/uptime", "r");
