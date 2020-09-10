@@ -5,19 +5,360 @@
 #include <utmp.h>
 #include <dirent.h>
 #include <string.h>
+#include <curses.h>
 
 
+struct process {
+	pid_t pid;
+	char user[64];
+	long priority;
+	long nice;
+	unsigned long virtual_memory;
+	long resident_set_memory;
+	long shared_memory;
+	char status;
+	float cpu_usage;
+	float memory_usage;
+	unsigned long long time;
+	char command[64];
+};
+
+struct node {
+	struct process process;
+	struct node *prev, *next;
+};
+
+struct user {
+	int uid;
+	char name[64];
+};
+
+void data_refresh();
+
+
+struct user userlist[128];
+int user_process_count;
+struct node *head, *tail;
+struct node *top;
 char buffer[1024];
 
+int width, height;
+int x, y;
+int ch;
+time_t t, last_update_time;
+struct tm tm;
+
+FILE *fp;
+int uptime;
+int uptime_hour;
+int uptime_min;
+struct utmp utmp;
+int user_count = 0;
+
+float cpu_average_mean_for_1min;
+float cpu_average_mean_for_5min;
+float cpu_average_mean_for_15min;
+
+int process_count;
+int running_process_count;
+int sleeping_process_count;
+int stopped_process_count;
+int zombie_process_count;
+struct dirent *dir;
+DIR *dp;
+
+int cpu_user;
+int cpu_nice;
+int cpu_system;
+int cpu_idle;
+int cpu_iowait;
+int cpu_irq;
+int cpu_softirq;
+int cpu_steal;
+int cpu_total;
+
+
+int mem_total;
+int mem_free;
+int mem_available;
+int mem_buffer;
+int mem_cache;
+int swap_total;
+int swap_free;
+
+
+void add_node(struct process process) {
+	struct node *p = head;
+	while (p != NULL) {
+		if (p->process.pid == process.pid) {
+			p->process = process;
+			return;
+		}
+		p = p->next;
+	}
+
+	if (head == NULL) {
+		head = malloc(sizeof(struct node));
+		head->process = process;
+		head->next = NULL;
+		head->prev = NULL;
+		tail = head;
+		return;
+	}
+
+	p = head;
+	while (p != NULL && p->process.pid < process.pid) {
+		p = p->next;
+	}
+
+	if (p == NULL)
+		p = tail;
+
+	struct node *new_node = malloc(sizeof(struct node));
+	if (p->next != NULL) {
+		p->next->prev = new_node;
+		new_node->next = p->next;
+	} else {
+		new_node->next = NULL;
+	}
+
+	p->next = new_node;
+	new_node->prev = p;
+	new_node->process = process;	
+
+	if (new_node->next == NULL)
+		tail = new_node;
+}
+
+void clear_all_nodes() {
+	struct node *p;
+	while (head) {
+		p = head->next;
+		head->next = head->prev = NULL;
+		free(head);
+		head = p;
+	}
+	head = tail = NULL;
+}
+
+WINDOW *main_window, *sub_window;
+
+void window_clear() {
+	delwin(sub_window);
+	delwin(main_window);
+	endwin();
+}
 
 int main(int argc, char **argv) {
-
 	// 현재 시간 구하기
-	time_t t = time(NULL);
-	struct tm tm = *localtime(&t);
+	t = time(NULL);
+	tm = *localtime(&t);
 
-	FILE *fp;
-	int uptime;
+	while (1) {
+		data_refresh();
+	}
+
+	/*
+	atexit(window_clear);
+	x = 0;
+	y = 7;
+
+	if ((main_window = initscr()) == NULL) {
+		fprintf(stderr, "initscr error\n");
+		exit(1);
+	}
+
+	getmaxyx(stdscr, height, width);
+
+	data_refresh();
+
+	for (struct node *n = head; n != NULL; n = n->next) {
+		printf("%s\n", n->process.user);
+	}
+	*/
+	
+	///*
+	/*
+	printw("top - %d:%d:%d up %d:%d, %d user, load average: %.2f, %.2f, %.2f\n",
+			tm.tm_hour,	// 시
+			tm.tm_min,	// 분
+			tm.tm_sec,	// 초
+			uptime_hour,	// 서버 부팅 시간(시)
+			uptime_min,		// 서버 부팅 시간(분)
+			user_count,
+			cpu_average_mean_for_1min,
+			cpu_average_mean_for_5min,
+			cpu_average_mean_for_15min);
+	printw("Tasks:  %d total,  %d running,  %d sleeping,  %d stopped,  %d zombie\n",
+			process_count,
+			running_process_count,
+			sleeping_process_count,
+			stopped_process_count,
+			zombie_process_count);
+	printw("%%Cpu(s)  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f, st\n",
+			(float) cpu_user / cpu_total * 100,
+			(float) cpu_system / cpu_total * 100,
+			(float) cpu_nice / cpu_total * 100,
+			(float) cpu_idle / cpu_total * 100,
+			(float) cpu_iowait / cpu_total * 100,
+			(float) cpu_irq / cpu_total * 100,
+			(float) cpu_softirq / cpu_total * 100,
+			(float) cpu_steal / cpu_total * 100
+	);
+	printw("KiB Mem : %d total,  %d free,  %d used,  %d buff/cache\n",
+			mem_total, mem_free, mem_total - mem_free, mem_buffer + mem_cache);
+	printw("KiB Swap:  %d total,  %d free, %d used,  %d avail Mem\n",
+			swap_total, swap_free, swap_total - swap_free, mem_available);
+	printw("\nPID USER PR NI VIRT RES SHR S %%CPU %%MME TIME+ COMMAND\n");
+
+	sub_window = subwin(main_window, height / 2, width, y, x);
+	keypad(stdscr, TRUE);
+
+	int sub_height, sub_width;
+	getmaxyx(sub_window, sub_height, sub_width);
+	
+	//scrollok(sub_window, TRUE);
+
+	top = head;
+	struct node *node = top;
+
+	// 출력
+	for (int i = 0; i < sub_height-1; i++) {
+		if (node == NULL)
+			break;
+
+		wprintw(sub_window, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s\n",
+				node->process.pid,
+				node->process.user,
+				node->process.priority,
+				node->process.nice,
+				node->process.virtual_memory,
+				node->process.resident_set_memory,
+				node->process.shared_memory,
+				node->process.status,
+				node->process.cpu_usage,
+				node->process.memory_usage,
+				node->process.time,
+				node->process.command
+		);
+
+		node = node->next;
+	}
+	wprintw(sub_window, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s",
+			node->process.pid,
+			node->process.user,
+			node->process.priority,
+			node->process.nice,
+			node->process.virtual_memory,
+			node->process.resident_set_memory,
+			node->process.shared_memory,
+			node->process.status,
+			node->process.cpu_usage,
+			node->process.memory_usage,
+			node->process.time,
+			node->process.command
+	);
+
+	wrefresh(sub_window);
+
+	while ((ch = getch()) != 'q') {
+		switch (ch) {
+		case KEY_UP:
+			data_refresh();
+
+			if (top->prev == NULL)
+				break;
+
+			top = top->prev;
+			node = top;
+
+			wscrl(sub_window, -1);
+			mvwprintw(sub_window, 0, 0, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s\n",
+					node->process.pid,
+					node->process.user,
+					node->process.priority,
+					node->process.nice,
+					node->process.virtual_memory,
+					node->process.resident_set_memory,
+					node->process.shared_memory,
+					node->process.status,
+					node->process.cpu_usage,
+					node->process.memory_usage,
+					node->process.time,
+					node->process.command
+			);
+			wrefresh(sub_window);
+			break;
+
+		case KEY_DOWN:
+			data_refresh();
+
+			top = top->next;
+			node = top;
+			for (int i = 0; i < sub_height-1; i++) {
+				if (node == NULL)
+					break;
+				node = node->next;
+			}
+
+			if (node == NULL) {
+				top = top->prev;
+				break;
+			}
+
+			wscrl(sub_window, 1);
+			mvwprintw(sub_window, sub_height - 1, 0, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s",
+					node->process.pid,
+					node->process.user,
+					node->process.priority,
+					node->process.nice,
+					node->process.virtual_memory,
+					node->process.resident_set_memory,
+					node->process.shared_memory,
+					node->process.status,
+					node->process.cpu_usage,
+					node->process.memory_usage,
+					node->process.time,
+					node->process.command
+			);
+			wrefresh(sub_window);
+			break;
+		}
+	}
+	refresh();
+	*/
+	exit(0);
+}
+
+
+
+void data_refresh() {
+	// 현재 시간 구하기
+	t = time(NULL);
+	tm = *localtime(&t);
+
+	if (t - last_update_time < 500)
+		return;
+
+	fp = fopen("/etc/passwd", "r");
+	if (fp == NULL) {
+		fprintf(stderr, "/etc/passwd open error\n");
+		exit(1);
+	}
+
+	char buf[64];
+	int uid;
+	while (fscanf(fp, "%[^:]:%*[^:]:%d", buf, &uid) == 2) {
+		userlist[user_count].uid = uid;
+		strncpy(userlist[user_count].name, buf, 64);
+		user_count++;
+		fscanf(fp, "%*[^\n]");
+		fgetc(fp);
+	}
+	//fclose(fp);
+
+	/*
+
 
 	// 부팅 시간 구하기
 	fp = fopen("/proc/uptime", "r");
@@ -30,37 +371,37 @@ int main(int argc, char **argv) {
 	fclose(fp);
 
 	// 부팅 시간 계산
-	int uptime_hour = uptime / (60 * 60);
-	int uptime_min = uptime % (60 * 60) / 60;
-	struct utmp utmp;
-
-	int user_count = 0;
+	uptime_hour = uptime / (60 * 60);
+	uptime_min = uptime % (60 * 60) / 60;
+	user_process_count = 0;
 
 	// 접속 사용자 로그
 	fp = fopen("/var/run/utmp", "r");
+	if (fp == NULL) {
+		fprintf(stderr, "/var/run/utmp open error\n");
+		exit(1);
+	}
 	while (fread(&utmp, sizeof(struct utmp), 1, fp) == 1) {
 		// 유저 프로세스만 세기
 		if (utmp.ut_type == USER_PROCESS)
-			user_count++;
+			user_process_count++;
 	}
 	fclose(fp);
 
 	// load average
 	fp = fopen("/proc/loadavg", "r");
-	float cpu_average_mean_for_1min;
-	float cpu_average_mean_for_5min;
-	float cpu_average_mean_for_15min;
-
+	if (fp == NULL) {
+		fprintf(stderr, "/proc/loadavg open error\n");
+		exit(1);
+	}
 	fscanf(fp, "%f %f %f", &cpu_average_mean_for_1min, &cpu_average_mean_for_5min, &cpu_average_mean_for_15min);
 	fclose(fp);
 
-	int process_count = 0;
-	int running_process_count = 0;
-	int sleeping_process_count = 0;
-	int stopped_process_count = 0;
-	int zombie_process_count = 0;
-	struct dirent *dir;
-	DIR *dp;
+	process_count = 0;
+	running_process_count = 0;
+	sleeping_process_count = 0;
+	stopped_process_count = 0;
+	zombie_process_count = 0;
 	dp = opendir("/proc");
 
 	if (dp != NULL) {
@@ -70,12 +411,63 @@ int main(int argc, char **argv) {
 
 			int process_id = atoi(dir->d_name);
 			char status;
+			char command[1024];
+			int uid;
+			long priority, nice, resident_set_memory, shared_memory;
+			unsigned long utime, stime, virtual_memory;
+			unsigned long long starttime;
+			int ruid, euid, suid, fuid;
+
 			if (process_id == 0)
 				continue;
 
 			sprintf(buffer, "/proc/%d/stat", process_id);
 			fp = fopen(buffer, "r");
-			fscanf(fp, "%*d %*s %c", &status);
+			fscanf(fp, "%*d %s %c", command, &status);
+			fscanf(fp, "%*d %*d %*d %*d %*d"); // ppid, pgrp, session, tty_nr, tpgid
+			fscanf(fp, "%*d %*d %*d %*d %*d"); // flags, minflt, cminflt, majflt, cmajflt
+			fscanf(fp, "%lu %lu %*d %*d", &utime, &stime);
+			fscanf(fp, "%ld %ld", &priority, &nice);
+			fscanf(fp, "%*d %*d"); // num_threads, itrealvalue
+			fscanf(fp, "%lld %lu %ld", &starttime, &virtual_memory, &resident_set_memory);
+			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // rsslim, startcode, endcode, startstack, kstkesp
+			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // kstkeip, signal, blocked, sigignore, sigcatch 
+			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // wchan, nswap, cnswap, exit_signal, processor
+
+			fclose(fp);
+
+			sprintf(buffer, "/proc/%d/statm", process_id);
+			fp = fopen(buffer, "r");
+			fscanf(fp, "%*d %ld %ld", &resident_set_memory, &shared_memory);
+			fclose(fp);
+
+			sprintf(buffer, "/proc/%d/status", process_id);
+			fp = fopen(buffer, "r");
+			fscanf(fp, "%*s %s", command);
+			fgetc(fp);
+			fscanf(fp, "%*[^\n]"); // umask
+			fgetc(fp);
+			fscanf(fp, "%*[^\n]"); // State
+			fgetc(fp);
+			fscanf(fp, "%*[^\n]"); // Tgid
+			fgetc(fp);
+			fscanf(fp, "%*[^\n]"); // Ngid
+			fgetc(fp);
+			fscanf(fp, "%*[^\n]"); // Pid
+			fgetc(fp);
+			fscanf(fp, "%*[^\n]"); // PPid
+			fgetc(fp);
+			fscanf(fp, "%*[^\n]"); // TracerPid
+			fgetc(fp);
+			fscanf(fp, "%*s%d%d%d%d", &ruid, &euid, &suid, &fuid);
+			fclose(fp);
+
+			int i;
+			for (i = 0; i < user_count; i++) {
+				if (userlist[i].uid == ruid) {
+					break;
+				}
+			}
 
 			switch (status) {
 				case 'T':
@@ -98,20 +490,25 @@ int main(int argc, char **argv) {
 					//printf("%c\n", status);
 					break;
 			}
-			fclose(fp);
+
+			struct process process;
+			process.pid = process_id;
+			strcpy(process.user, userlist[i].name);
+			process.priority = priority;
+			process.nice = nice;
+			process.virtual_memory = virtual_memory;
+			process.resident_set_memory = resident_set_memory;
+			process.shared_memory = shared_memory;
+			process.status = status;
+			// CPU
+			// Mem
+			process.time = starttime;
+			strcpy(process.command, command);
+			add_node(process);
 			process_count++;
 		}
 	}
-
-	int cpu_user;
-	int cpu_nice;
-	int cpu_system;
-	int cpu_idle;
-	int cpu_iowait;
-	int cpu_irq;
-	int cpu_softirq;
-	int cpu_steal;
-	int cpu_total;
+	closedir(dp);
 
 	// CPU 사용량
 	fp = fopen("/proc/stat", "r");
@@ -123,14 +520,6 @@ int main(int argc, char **argv) {
 	cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal;
 
 	// 메모리 사용량
-	int mem_total;
-	int mem_free;
-	int mem_available;
-	int mem_buffer;
-	int mem_cache;
-	int swap_total;
-	int swap_free;
-
 	fp = fopen("/proc/meminfo", "r");
 	fscanf(fp, "%*s %d kB", &mem_total);
 	fscanf(fp, "%*s %d kB", &mem_free);
@@ -149,38 +538,5 @@ int main(int argc, char **argv) {
 	fscanf(fp, "%*s %d kB", &swap_total);
 	fscanf(fp, "%*s %d kB", &swap_free);
 	fclose(fp);
-
-	printf("top - %d:%d:%d up %d:%d, %d user, load average: %.2f, %.2f, %.2f\n",
-			tm.tm_hour,	// 시
-			tm.tm_min,	// 분
-			tm.tm_sec,	// 초
-			uptime_hour,	// 서버 부팅 시간(시)
-			uptime_min,		// 서버 부팅 시간(분)
-			user_count,
-			cpu_average_mean_for_1min,
-			cpu_average_mean_for_5min,
-			cpu_average_mean_for_15min);
-	printf("Tasks:  %d total,  %d running,  %d sleeping,  %d stopped,  %d zombie\n",
-			process_count,
-			running_process_count,
-			sleeping_process_count,
-			stopped_process_count,
-			zombie_process_count);
-	printf("%%Cpu(s)  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f, st\n",
-			(float) cpu_user / cpu_total * 100,
-			(float) cpu_system / cpu_total * 100,
-			(float) cpu_nice / cpu_total * 100,
-			(float) cpu_idle / cpu_total * 100,
-			(float) cpu_iowait / cpu_total * 100,
-			(float) cpu_irq / cpu_total * 100,
-			(float) cpu_softirq / cpu_total * 100,
-			(float) cpu_steal / cpu_total * 100
-	);
-	printf("KiB Mem : %d total,  %d free,  %d used,  %d buff/cache\n",
-			mem_total, mem_free, mem_total - mem_free, mem_buffer + mem_cache);
-	printf("KiB Swap:  %d total,  %d free, %d used,  %d avail Mem\n",
-			swap_total, swap_free, swap_total - swap_free, mem_available);
-
-	exit(0);
+	*/
 }
-

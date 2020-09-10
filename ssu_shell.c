@@ -13,8 +13,7 @@
 void process(char **tokens);
 void run_op(const char *op, char **params, int input_redirection, int output_redirection, int input_pipe_fd, int output_pipe_fd);
 char **has_pipe(char **tokens);
-
-
+void ttop();
 
 
 /* Splits the string by space and returns the array of tokens
@@ -49,6 +48,7 @@ char **tokenize(char *line)
 
 
 int main(int argc, char* argv[]) {
+
 	char  line[MAX_INPUT_SIZE];            
 	char  **tokens;              
 	int i;
@@ -128,18 +128,19 @@ void process(char **tokens) {
 			*p = NULL;
 			cur_pipe = 1;
 		}
-
-		//char buffer[MAX_INPUT_SIZE];
-		//sprintf(buffer, "/bin/%s", tokens[0]);
-	
-		// /bin에 명령어가 존재하는 경우
-		// Linux 내장 명령어
-		//if (stat(buffer, &sb) == 0) {
-		//	run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
-		//} else {
-		run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
-		//}
-
+		// ttop 명령어
+		if (!strcmp(tokens[0], "ttop")) {
+			ttop();
+		}
+		
+		// pps 명령어
+		else if (!strcmp(tokens[0], "pps")) {
+			//pps();
+		}
+		
+		else {
+			run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
+		}
 		prev_pipe = cur_pipe;
 		cur_pipe = 0;
 
@@ -160,18 +161,6 @@ void process(char **tokens) {
 		tokens = ++p;
 	}
 	
-	// ttop 명령어
-	if (!strcmp(tokens[0], "ttop")) {
-
-		return;
-	}
-
-	// pps 명령어
-	if (!strcmp(tokens[0], "pps")) {
-
-		return;
-	}
-
 	return;
 }
 
@@ -186,7 +175,6 @@ char **has_pipe(char **tokens) {
 
 
 void ttop() {
-
 }
 
 void pps() {
