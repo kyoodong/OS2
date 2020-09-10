@@ -10,7 +10,7 @@
 
 struct process {
 	pid_t pid;
-	char user[64];
+	char user[20];
 	long priority;
 	long nice;
 	unsigned long virtual_memory;
@@ -20,7 +20,7 @@ struct process {
 	float cpu_usage;
 	float memory_usage;
 	unsigned long long time;
-	char command[64];
+	char command[20];
 };
 
 struct node {
@@ -30,7 +30,7 @@ struct node {
 
 struct user {
 	int uid;
-	char name[64];
+	char name[20];
 };
 
 void data_refresh();
@@ -40,7 +40,7 @@ struct user userlist[128];
 int user_process_count;
 struct node *head, *tail;
 struct node *top;
-char buffer[1024];
+char buffer[512];
 
 int width, height;
 int x, y;
@@ -49,6 +49,7 @@ time_t t, last_update_time;
 struct tm tm;
 
 FILE *fp;
+
 int uptime;
 int uptime_hour;
 int uptime_min;
@@ -85,7 +86,6 @@ int mem_buffer;
 int mem_cache;
 int swap_total;
 int swap_free;
-
 
 void add_node(struct process process) {
 	struct node *p = head;
@@ -149,43 +149,14 @@ void window_clear() {
 	endwin();
 }
 
-int main(int argc, char **argv) {
-	// 현재 시간 구하기
-	t = time(NULL);
-	tm = *localtime(&t);
-
-	while (1) {
-		data_refresh();
-	}
-
-	/*
-	atexit(window_clear);
-	x = 0;
-	y = 7;
-
-	if ((main_window = initscr()) == NULL) {
-		fprintf(stderr, "initscr error\n");
-		exit(1);
-	}
-
-	getmaxyx(stdscr, height, width);
-
-	data_refresh();
-
-	for (struct node *n = head; n != NULL; n = n->next) {
-		printf("%s\n", n->process.user);
-	}
-	*/
-	
-	///*
-	/*
-	printw("top - %d:%d:%d up %d:%d, %d user, load average: %.2f, %.2f, %.2f\n",
+void print_main() {
+	mvwprintw(main_window, 0, 0, "top - %02d:%02d:%02d up %02d:%02d, %d user, load average: %.2f, %.2f, %.2f\n",
 			tm.tm_hour,	// 시
 			tm.tm_min,	// 분
 			tm.tm_sec,	// 초
 			uptime_hour,	// 서버 부팅 시간(시)
 			uptime_min,		// 서버 부팅 시간(분)
-			user_count,
+			user_process_count,
 			cpu_average_mean_for_1min,
 			cpu_average_mean_for_5min,
 			cpu_average_mean_for_15min);
@@ -211,13 +182,31 @@ int main(int argc, char **argv) {
 			swap_total, swap_free, swap_total - swap_free, mem_available);
 	printw("\nPID USER PR NI VIRT RES SHR S %%CPU %%MME TIME+ COMMAND\n");
 
+}
+
+int main(int argc, char **argv) {
+	atexit(window_clear);
+	x = 0;
+	y = 7;
+
+	if ((main_window = initscr()) == NULL) {
+		fprintf(stderr, "initscr error\n");
+		exit(1);
+	}
+
+	getmaxyx(stdscr, height, width);
+
+	data_refresh();
+
+	print_main();
+
 	sub_window = subwin(main_window, height / 2, width, y, x);
 	keypad(stdscr, TRUE);
 
 	int sub_height, sub_width;
 	getmaxyx(sub_window, sub_height, sub_width);
 	
-	//scrollok(sub_window, TRUE);
+	scrollok(sub_window, TRUE);
 
 	top = head;
 	struct node *node = top;
@@ -265,6 +254,7 @@ int main(int argc, char **argv) {
 		switch (ch) {
 		case KEY_UP:
 			data_refresh();
+			print_main();
 
 			if (top->prev == NULL)
 				break;
@@ -292,6 +282,7 @@ int main(int argc, char **argv) {
 
 		case KEY_DOWN:
 			data_refresh();
+			print_main();
 
 			top = top->next;
 			node = top;
@@ -326,7 +317,6 @@ int main(int argc, char **argv) {
 		}
 	}
 	refresh();
-	*/
 	exit(0);
 }
 
@@ -337,9 +327,10 @@ void data_refresh() {
 	t = time(NULL);
 	tm = *localtime(&t);
 
-	if (t - last_update_time < 500)
+	if (t - last_update_time < 200)
 		return;
 
+	last_update_time = t;
 	fp = fopen("/etc/passwd", "r");
 	if (fp == NULL) {
 		fprintf(stderr, "/etc/passwd open error\n");
@@ -355,10 +346,7 @@ void data_refresh() {
 		fscanf(fp, "%*[^\n]");
 		fgetc(fp);
 	}
-	//fclose(fp);
-
-	/*
-
+	fclose(fp);
 
 	// 부팅 시간 구하기
 	fp = fopen("/proc/uptime", "r");
@@ -538,5 +526,4 @@ void data_refresh() {
 	fscanf(fp, "%*s %d kB", &swap_total);
 	fscanf(fp, "%*s %d kB", &swap_free);
 	fclose(fp);
-	*/
 }
