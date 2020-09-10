@@ -21,7 +21,7 @@ struct process {
 	char status;
 	float cpu_usage;
 	float memory_usage;
-	unsigned long long time;
+	unsigned long time;
 	char command[20];
 };
 
@@ -255,7 +255,9 @@ void print_sub() {
 	int sub_height, sub_width;
 	getmaxyx(sub_window, sub_height, sub_width);
 	
+	long hz = sysconf(_SC_CLK_TCK);
 	struct node *node = top;
+
 	for (int i = 0; i < sub_height - 1; i++) {
 		if (node == NULL)
 			return;
@@ -268,14 +270,25 @@ void print_sub() {
 	}
 
 	char buffer[1024];
+	char time_buffer[12];
 	node = top;
 	wmove(sub_window, 0, 0);
+
 	// 출력
 	for (int i = 0; i < sub_height-1; i++) {
 		if (node == NULL)
 			break;
 
-		sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10llu %s\n",
+		unsigned long t = node->process.time;
+		unsigned long min, sec, mils;
+
+		min = t / (hz * 60);
+		t %= (60 * hz);
+		sec = t / hz;
+		mils = t % hz;
+
+		sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
+		sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10s %s\n",
 				node->process.pid,
 				node->process.user,
 				node->process.priority,
@@ -286,7 +299,7 @@ void print_sub() {
 				node->process.status,
 				node->process.cpu_usage,
 				node->process.memory_usage,
-				node->process.time,
+				time_buffer,
 				node->process.command
 		);
 		buffer[sub_width] = '\0';
@@ -295,7 +308,17 @@ void print_sub() {
 
 		node = node->next;
 	}
-	sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10llu %s\n",
+
+	unsigned long t = node->process.time;
+	unsigned long min, sec, mils;
+
+	min = t / (hz * 60);
+	t %= (60 * hz);
+	sec = t / hz;
+	mils = t % hz;
+
+	sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
+	sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10s %s",
 			node->process.pid,
 			node->process.user,
 			node->process.priority,
@@ -306,7 +329,7 @@ void print_sub() {
 			node->process.status,
 			node->process.cpu_usage,
 			node->process.memory_usage,
-			node->process.time,
+			time_buffer,
 			node->process.command
 	);
 	buffer[sub_width - 1] = '\0';
@@ -556,7 +579,7 @@ void data_refresh() {
 			process.status = status;
 			// CPU
 			// Mem
-			process.time = starttime;
+			process.time = utime + stime;
 			strcpy(process.command, command);
 			add_node(process);
 			process_count++;
