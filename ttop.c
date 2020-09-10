@@ -195,7 +195,10 @@ void window_clear() {
 }
 
 void print_main() {
-	mvwprintw(main_window, 0, 0, "top - %02d:%02d:%02d up %02d:%02d, %d user, load average: %.2f, %.2f, %.2f\n",
+	getmaxyx(main_window, height, width);
+	char buffer[1024];
+
+	sprintf(buffer, "top - %02d:%02d:%02d up %02d:%02d, %d user, load average: %.2f, %.2f, %.2f\n",
 			tm.tm_hour,	// 시
 			tm.tm_min,	// 분
 			tm.tm_sec,	// 초
@@ -205,13 +208,20 @@ void print_main() {
 			cpu_average_mean_for_1min,
 			cpu_average_mean_for_5min,
 			cpu_average_mean_for_15min);
-	printw("Tasks:  %d total,  %d running,  %d sleeping,  %d stopped,  %d zombie\n",
+
+	buffer[width] = '\0';
+	mvwprintw(main_window, 0, 0, buffer); 
+
+	sprintf(buffer, "Tasks:  %d total,  %d running,  %d sleeping,  %d stopped,  %d zombie\n",
 			process_count,
 			running_process_count,
 			sleeping_process_count,
 			stopped_process_count,
 			zombie_process_count);
-	printw("%%Cpu(s)  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f, st\n",
+	buffer[width] = '\0';
+	printw(buffer);
+
+	sprintf(buffer, "%%Cpu(s)  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f, st\n",
 			(float) cpu_user / cpu_total * 100,
 			(float) cpu_system / cpu_total * 100,
 			(float) cpu_nice / cpu_total * 100,
@@ -221,12 +231,24 @@ void print_main() {
 			(float) cpu_softirq / cpu_total * 100,
 			(float) cpu_steal / cpu_total * 100
 	);
-	printw("KiB Mem : %d total,  %d free,  %d used,  %d buff/cache\n",
-			mem_total, mem_free, mem_total - mem_free, mem_buffer + mem_cache);
-	printw("KiB Swap:  %d total,  %d free, %d used,  %d avail Mem\n",
-			swap_total, swap_free, swap_total - swap_free, mem_available);
-	printw("\nPID USER PR NI VIRT RES SHR S %%CPU %%MME TIME+ COMMAND\n");
+	buffer[width] = '\0';
+	printw(buffer);
 
+	sprintf(buffer, "KiB Mem : %d total,  %d free,  %d used,  %d buff/cache\n",
+			mem_total, mem_free, mem_total - mem_free, mem_buffer + mem_cache);
+	buffer[width] = '\0';
+	printw(buffer);
+
+	sprintf(buffer, "KiB Swap:  %d total,  %d free, %d used,  %d avail Mem\n",
+			swap_total, swap_free, swap_total - swap_free, mem_available);
+	buffer[width] = '\0';
+	printw(buffer);
+
+	buffer[0] = '\0';
+	sprintf(buffer, "\n%6s%8s%8s%4s%10s%10s%10s %1s%7s%7s%10s COMMAND\n",
+			"PID", "USER", "PR", "NI", "VIRT", "RES", "SHR", "S", "%%CPU", "%%MEM", "TIME+");
+	buffer[width] = '\0';
+	printw(buffer);
 }
 
 void print_sub() {
@@ -245,6 +267,7 @@ void print_sub() {
 		return;
 	}
 
+	char buffer[1024];
 	node = top;
 	wmove(sub_window, 0, 0);
 	// 출력
@@ -252,7 +275,7 @@ void print_sub() {
 		if (node == NULL)
 			break;
 
-		wprintw(sub_window, "%d %s %ld %ld %lu %ld %ld %c %.1f %.1f %llu %s\n",
+		sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10llu %s\n",
 				node->process.pid,
 				node->process.user,
 				node->process.priority,
@@ -266,10 +289,13 @@ void print_sub() {
 				node->process.time,
 				node->process.command
 		);
+		buffer[sub_width] = '\0';
+		buffer[sub_width] = '\n';
+		wprintw(sub_window, buffer);
 
 		node = node->next;
 	}
-	wprintw(sub_window, "%d %s %ld %ld %lu %ld %ld %c %.1f %.1f %llu %s",
+	sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10llu %s\n",
 			node->process.pid,
 			node->process.user,
 			node->process.priority,
@@ -283,6 +309,9 @@ void print_sub() {
 			node->process.time,
 			node->process.command
 	);
+	buffer[sub_width - 1] = '\0';
+	buffer[sub_width] = '\n';
+	wprintw(sub_window, buffer);
 
 	wrefresh(sub_window);
 
@@ -302,7 +331,7 @@ int main(int argc, char **argv) {
 	sigaction(SIGABRT, &act, NULL);
 	sigaction(SIGSEGV, &act, NULL);
 	x = 0;
-	y = 7;
+	y = 6;
 
 	if ((main_window = initscr()) == NULL) {
 		fprintf(stderr, "initscr error\n");
