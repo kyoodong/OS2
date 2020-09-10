@@ -26,6 +26,7 @@ struct process {
 struct node {
 	struct process process;
 	struct node *prev, *next;
+	int visit;
 };
 
 struct user {
@@ -92,6 +93,7 @@ void add_node(struct process process) {
 	while (p != NULL) {
 		if (p->process.pid == process.pid) {
 			p->process = process;
+			p->visit = 1;
 			return;
 		}
 		p = p->next;
@@ -103,6 +105,7 @@ void add_node(struct process process) {
 		head->next = NULL;
 		head->prev = NULL;
 		tail = head;
+		head->visit = 1;
 		return;
 	}
 
@@ -124,21 +127,60 @@ void add_node(struct process process) {
 
 	p->next = new_node;
 	new_node->prev = p;
-	new_node->process = process;	
+	new_node->process = process;
+	new_node->visit = 1;
 
 	if (new_node->next == NULL)
 		tail = new_node;
 }
 
-void clear_all_nodes() {
-	struct node *p;
-	while (head) {
-		p = head->next;
-		head->next = head->prev = NULL;
-		free(head);
-		head = p;
+void clear_visit() {
+	struct node *p = head;
+	while (p != NULL) {
+		p->visit = 0;
+		p = p->next;
 	}
-	head = tail = NULL;
+}
+
+void delete_node(struct node *node) {
+	struct node *prev, *next;
+	prev = node->prev;
+	next = node->next;
+
+	if (next != NULL) {
+		if (node == top)
+			top = next;
+
+		if (node == head)
+			head = next;
+		next->prev = prev;
+	}
+
+
+	if (prev != NULL) {
+		if (node == top)
+			top = prev;
+
+		if (node == head)
+			head = prev;
+		prev->next = next;
+	}
+
+	free(node);
+}
+
+void clear_non_visited_nodes() {
+	struct node *p = head;
+	struct node *next;
+	while (p != NULL) {
+		if (p->visit == 0) {
+			next = p->next;
+			delete_node(p);
+			p = next;
+			continue;
+		}
+		p = p->next;
+	}
 }
 
 WINDOW *main_window, *sub_window;
@@ -184,6 +226,65 @@ void print_main() {
 
 }
 
+void print_sub() {
+	int sub_height, sub_width;
+	getmaxyx(sub_window, sub_height, sub_width);
+	
+	struct node *node = top;
+	for (int i = 0; i < sub_height - 1; i++) {
+		if (node == NULL)
+			return;
+		node = node->next;
+	}
+
+	if (node == NULL) {
+		top = top->prev;
+		return;
+	}
+
+	node = top;
+	wmove(sub_window, 0, 0);
+	// 출력
+	for (int i = 0; i < sub_height-1; i++) {
+		if (node == NULL)
+			break;
+
+		wprintw(sub_window, "%d %s %ld %ld %lu %ld %ld %c %.1f %.1f %llu %s\n",
+				node->process.pid,
+				node->process.user,
+				node->process.priority,
+				node->process.nice,
+				node->process.virtual_memory,
+				node->process.resident_set_memory,
+				node->process.shared_memory,
+				node->process.status,
+				node->process.cpu_usage,
+				node->process.memory_usage,
+				node->process.time,
+				node->process.command
+		);
+
+		node = node->next;
+	}
+	wprintw(sub_window, "%d %s %ld %ld %lu %ld %ld %c %.1f %.1f %llu %s",
+			node->process.pid,
+			node->process.user,
+			node->process.priority,
+			node->process.nice,
+			node->process.virtual_memory,
+			node->process.resident_set_memory,
+			node->process.shared_memory,
+			node->process.status,
+			node->process.cpu_usage,
+			node->process.memory_usage,
+			node->process.time,
+			node->process.command
+	);
+
+	wrefresh(sub_window);
+
+}
+
 int main(int argc, char **argv) {
 	atexit(window_clear);
 	x = 0;
@@ -203,52 +304,10 @@ int main(int argc, char **argv) {
 	sub_window = subwin(main_window, height / 2, width, y, x);
 	keypad(stdscr, TRUE);
 
-	int sub_height, sub_width;
-	getmaxyx(sub_window, sub_height, sub_width);
-	
 	scrollok(sub_window, TRUE);
 
 	top = head;
-	struct node *node = top;
-
-	// 출력
-	for (int i = 0; i < sub_height-1; i++) {
-		if (node == NULL)
-			break;
-
-		wprintw(sub_window, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s\n",
-				node->process.pid,
-				node->process.user,
-				node->process.priority,
-				node->process.nice,
-				node->process.virtual_memory,
-				node->process.resident_set_memory,
-				node->process.shared_memory,
-				node->process.status,
-				node->process.cpu_usage,
-				node->process.memory_usage,
-				node->process.time,
-				node->process.command
-		);
-
-		node = node->next;
-	}
-	wprintw(sub_window, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s",
-			node->process.pid,
-			node->process.user,
-			node->process.priority,
-			node->process.nice,
-			node->process.virtual_memory,
-			node->process.resident_set_memory,
-			node->process.shared_memory,
-			node->process.status,
-			node->process.cpu_usage,
-			node->process.memory_usage,
-			node->process.time,
-			node->process.command
-	);
-
-	wrefresh(sub_window);
+	print_sub();
 
 	while ((ch = getch()) != 'q') {
 		switch (ch) {
@@ -260,24 +319,8 @@ int main(int argc, char **argv) {
 				break;
 
 			top = top->prev;
-			node = top;
-
 			wscrl(sub_window, -1);
-			mvwprintw(sub_window, 0, 0, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s\n",
-					node->process.pid,
-					node->process.user,
-					node->process.priority,
-					node->process.nice,
-					node->process.virtual_memory,
-					node->process.resident_set_memory,
-					node->process.shared_memory,
-					node->process.status,
-					node->process.cpu_usage,
-					node->process.memory_usage,
-					node->process.time,
-					node->process.command
-			);
-			wrefresh(sub_window);
+			print_sub();
 			break;
 
 		case KEY_DOWN:
@@ -285,34 +328,8 @@ int main(int argc, char **argv) {
 			print_main();
 
 			top = top->next;
-			node = top;
-			for (int i = 0; i < sub_height-1; i++) {
-				if (node == NULL)
-					break;
-				node = node->next;
-			}
-
-			if (node == NULL) {
-				top = top->prev;
-				break;
-			}
-
 			wscrl(sub_window, 1);
-			mvwprintw(sub_window, sub_height - 1, 0, "%d %s %ld %ld %llu %ld %ld %c %.1f %.1f %llu %s",
-					node->process.pid,
-					node->process.user,
-					node->process.priority,
-					node->process.nice,
-					node->process.virtual_memory,
-					node->process.resident_set_memory,
-					node->process.shared_memory,
-					node->process.status,
-					node->process.cpu_usage,
-					node->process.memory_usage,
-					node->process.time,
-					node->process.command
-			);
-			wrefresh(sub_window);
+			print_sub();
 			break;
 		}
 	}
@@ -329,6 +346,9 @@ void data_refresh() {
 
 	if (t - last_update_time < 200)
 		return;
+
+	clear_non_visited_nodes();
+	clear_visit();
 
 	last_update_time = t;
 	fp = fopen("/etc/passwd", "r");
