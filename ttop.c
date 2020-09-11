@@ -8,7 +8,8 @@
 #include <curses.h>
 #include <signal.h>
 #include <fcntl.h>
-#include <pwd.h>
+#include <errno.h>
+
 
 struct process {
 	pid_t pid;
@@ -41,6 +42,7 @@ void data_refresh();
 
 struct sigaction act;
 struct sigaction act_alarm;
+struct user userlist[128];
 int user_process_count;
 struct node *head, *tail;
 struct node *top;
@@ -644,13 +646,9 @@ void data_refresh() {
 			}
 
 			struct process process;
-			struct passwd *passwd = getpwuid(uid);
 
 			process.pid = process_id;
-			strncpy(process.user, passwd->pw_name, 8);
-			if (strlen(passwd->pw_name) > 8)
-				process.user[7] = '\n';
-			process.user[8] = '\0';
+			strcpy(process.user, userlist[i].name);
 			process.priority = priority;
 			process.nice = nice;
 			process.virtual_memory = virtual_memory;
