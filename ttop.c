@@ -8,6 +8,7 @@
 #include <curses.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <pwd.h>
 
 struct process {
 	pid_t pid;
@@ -39,7 +40,7 @@ void data_refresh();
 
 
 struct sigaction act;
-struct user userlist[128];
+struct sigaction act_alarm;
 int user_process_count;
 struct node *head, *tail;
 struct node *top;
@@ -287,7 +288,7 @@ void print_sub() {
 
 	// 출력
 	for (int i = 0; i < sub_height-1; i++) {
-		if (node == NULL)
+		if (node->next == NULL)
 			break;
 
 		unsigned long t = node->process.time;
@@ -355,6 +356,14 @@ void sig_handler(int signo) {
 	exit(1);
 }
 
+void sig_alarm_handler(int signo) {
+	data_refresh();
+	print_main();
+	print_sub();
+
+	alarm(3);
+}
+
 
 int main(int argc, char **argv) {
 	int fd = open("err.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
@@ -362,11 +371,16 @@ int main(int argc, char **argv) {
 
 	atexit(window_clear);
 	act.sa_handler = sig_handler;
+	act_alarm.sa_handler = sig_alarm_handler;
+
 	sigemptyset(&act.sa_mask);
+	sigemptyset(&act_alarm.sa_mask);
 
 	sigaction(SIGINT, &act, NULL);
 	sigaction(SIGABRT, &act, NULL);
 	sigaction(SIGSEGV, &act, NULL);
+	sigaction(SIGALRM, &act_alarm, NULL);
+	alarm(3);
 	x = 0;
 	y = 7;
 
@@ -630,8 +644,13 @@ void data_refresh() {
 			}
 
 			struct process process;
+			struct passwd *passwd = getpwuid(uid);
+
 			process.pid = process_id;
-			strcpy(process.user, userlist[i].name);
+			strncpy(process.user, passwd->pw_name, 8);
+			if (strlen(passwd->pw_name) > 8)
+				process.user[7] = '\n';
+			process.user[8] = '\0';
 			process.priority = priority;
 			process.nice = nice;
 			process.virtual_memory = virtual_memory;
@@ -645,6 +664,6 @@ void data_refresh() {
 			add_node(process);
 			process_count++;
 		}
+		closedir(dp);
 	}
-	closedir(dp);
 }
