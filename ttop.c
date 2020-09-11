@@ -7,8 +7,7 @@
 #include <string.h>
 #include <curses.h>
 #include <signal.h>
-
-#define MIN_INTERVAL 1
+#include <fcntl.h>
 
 struct process {
 	pid_t pid;
@@ -81,6 +80,9 @@ int cpu_irq;
 int cpu_softirq;
 int cpu_steal;
 int cpu_total;
+int old_cpu_total;
+int cpu_total_diff;
+int sum;
 
 
 int mem_total;
@@ -93,9 +95,17 @@ int swap_free;
 
 void add_node(struct process process) {
 	struct node *p = head;
+	long hz = sysconf(_SC_CLK_TCK);
+
 	while (p != NULL) {
 		if (p->process.pid == process.pid) {
+			int cpu_diff = process.time - p->process.time;
+			sum += cpu_diff;
+			
 			p->process = process;
+			if (cpu_total_diff > 0) {
+				p->process.cpu_usage = 100 * cpu_diff / cpu_total_diff;
+			}
 			p->visit = 1;
 			return;
 		}
@@ -221,7 +231,8 @@ void print_main() {
 	buffer[width] = '\0';
 	printw(buffer);
 
-	sprintf(buffer, "%%Cpu(s)  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f, st\n",
+	sprintf(buffer, "%s  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f st\n",
+			"%%CPU",
 			(float) cpu_user / cpu_total * 100,
 			(float) cpu_system / cpu_total * 100,
 			(float) cpu_nice / cpu_total * 100,
@@ -346,6 +357,9 @@ void sig_handler(int signo) {
 
 
 int main(int argc, char **argv) {
+	int fd = open("err.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
+	dup2(fd, 2);
+
 	atexit(window_clear);
 	act.sa_handler = sig_handler;
 	sigemptyset(&act.sa_mask);
@@ -354,7 +368,7 @@ int main(int argc, char **argv) {
 	sigaction(SIGABRT, &act, NULL);
 	sigaction(SIGSEGV, &act, NULL);
 	x = 0;
-	y = 6;
+	y = 7;
 
 	if ((main_window = initscr()) == NULL) {
 		fprintf(stderr, "initscr error\n");
@@ -429,9 +443,6 @@ void data_refresh() {
 	t = time(NULL);
 	tm = *localtime(&t);
 
-	if (t - last_update_time < MIN_INTERVAL)
-		return;
-
 	clear_non_visited_nodes();
 	clear_visit();
 
@@ -473,6 +484,23 @@ void data_refresh() {
 	}
 	fscanf(fp, "%f %f %f", &cpu_average_mean_for_1min, &cpu_average_mean_for_5min, &cpu_average_mean_for_15min);
 	fclose(fp);
+
+	old_cpu_total = cpu_total;
+
+	// CPU 사용량
+	fp = fopen("/proc/stat", "r");
+	fscanf(fp, "%*s %d %d %d %d %d %d %d %d",
+			&cpu_user, &cpu_nice, &cpu_system, &cpu_idle,
+			&cpu_iowait, &cpu_irq, &cpu_softirq, &cpu_steal);
+	fclose(fp);
+
+	cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal;
+	//cpu_total = cpu_user + cpu_system;
+
+	fprintf(stderr, "cpu_total_diff = %d\n", cpu_total_diff);
+	cpu_total_diff = cpu_total - old_cpu_total;
+	sum = 0;
+
 
 	process_count = 0;
 	running_process_count = 0;
@@ -577,24 +605,18 @@ void data_refresh() {
 			process.resident_set_memory = resident_set_memory;
 			process.shared_memory = shared_memory;
 			process.status = status;
-			// CPU
-			// Mem
 			process.time = utime + stime;
+			// CPU
+			process.cpu_usage = 0;
+
+			// Mem
+			process.memory_usage = 0;
 			strcpy(process.command, command);
 			add_node(process);
 			process_count++;
 		}
 	}
 	closedir(dp);
-
-	// CPU 사용량
-	fp = fopen("/proc/stat", "r");
-	fscanf(fp, "%*s %d %d %d %d %d %d %d %d",
-			&cpu_user, &cpu_nice, &cpu_system, &cpu_idle,
-			&cpu_iowait, &cpu_irq, &cpu_softirq, &cpu_steal);
-	fclose(fp);
-
-	cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal;
 
 	// 메모리 사용량
 	fp = fopen("/proc/meminfo", "r");
