@@ -11,7 +11,7 @@
 
 struct process {
 	pid_t pid;
-	char user[20];
+	char user[9];
 	long priority;
 	long nice;
 	unsigned long virtual_memory;
@@ -21,7 +21,7 @@ struct process {
 	float cpu_usage;
 	float memory_usage;
 	unsigned long time;
-	char command[20];
+	char command[64];
 };
 
 struct node {
@@ -32,7 +32,7 @@ struct node {
 
 struct user {
 	int uid;
-	char name[20];
+	char name[9];
 };
 
 void data_refresh();
@@ -256,7 +256,7 @@ void print_main() {
 	printw(buffer);
 
 	buffer[0] = '\0';
-	sprintf(buffer, "\n%6s%8s%8s%4s%10s%10s%10s %1s%7s%7s%10s COMMAND\n",
+	sprintf(buffer, "\n%6s%9s%8s%5s%11s%8s%8s %1s%7s%7s%10s COMMAND\n",
 			"PID", "USER", "PR", "NI", "VIRT", "RES", "SHR", "S", "%%CPU", "%%MEM", "TIME+");
 	buffer[width] = '\0';
 	printw(buffer);
@@ -299,7 +299,7 @@ void print_sub() {
 		mils = t % hz;
 
 		sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
-		sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10s %s\n",
+		sprintf(buffer, "%6d%9s%8ld%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s\n",
 				node->process.pid,
 				node->process.user,
 				node->process.priority,
@@ -329,7 +329,7 @@ void print_sub() {
 	mils = t % hz;
 
 	sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
-	sprintf(buffer, "%6d%8s%8ld%4ld%10lu%10ld%10ld %c%6.1f%6.1f%10s %s",
+	sprintf(buffer, "%6d%9s%8ld%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s",
 			node->process.pid,
 			node->process.user,
 			node->process.priority,
@@ -390,7 +390,11 @@ int main(int argc, char **argv) {
 	int uid;
 	while (fscanf(fp, "%[^:]:%*[^:]:%d", buf, &uid) == 2) {
 		userlist[user_count].uid = uid;
-		strncpy(userlist[user_count].name, buf, 64);
+		strncpy(userlist[user_count].name, buf, 8);
+		if (strlen(buf) > 8)
+			userlist[user_count].name[7] = '+';
+		userlist[user_count].name[8] = '\0';
+
 		user_count++;
 		fscanf(fp, "%*[^\n]");
 		fgetc(fp);
@@ -401,7 +405,7 @@ int main(int argc, char **argv) {
 
 	print_main();
 
-	sub_window = subwin(main_window, height / 2, width, y, x);
+	sub_window = subwin(main_window, height - 7, width, y, x);
 	keypad(stdscr, TRUE);
 
 	scrollok(sub_window, TRUE);
@@ -501,7 +505,27 @@ void data_refresh() {
 	cpu_total_diff = cpu_total - old_cpu_total;
 	sum = 0;
 
+	// 메모리 사용량
+	fp = fopen("/proc/meminfo", "r");
+	fscanf(fp, "%*s %d kB", &mem_total);
+	fscanf(fp, "%*s %d kB", &mem_free);
+	fscanf(fp, "%*s %d kB", &mem_available);
+	fscanf(fp, "%*s %d kB", &mem_buffer);
+	fscanf(fp, "%*s %d kB", &mem_cache);
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %d kB", &swap_total);
+	fscanf(fp, "%*s %d kB", &swap_free);
+	fclose(fp);
 
+	// 모든 프로세스 정리
 	process_count = 0;
 	running_process_count = 0;
 	sleeping_process_count = 0;
@@ -528,6 +552,9 @@ void data_refresh() {
 
 			sprintf(buffer, "/proc/%d/stat", process_id);
 			fp = fopen(buffer, "r");
+			if (fp == NULL)
+				continue;
+
 			fscanf(fp, "%*d %s %c", command, &status);
 			fscanf(fp, "%*d %*d %*d %*d %*d"); // ppid, pgrp, session, tty_nr, tpgid
 			fscanf(fp, "%*d %*d %*d %*d %*d"); // flags, minflt, cminflt, majflt, cmajflt
@@ -543,11 +570,17 @@ void data_refresh() {
 
 			sprintf(buffer, "/proc/%d/statm", process_id);
 			fp = fopen(buffer, "r");
+			if (fp == NULL)
+				continue;
+
 			fscanf(fp, "%*d %ld %ld", &resident_set_memory, &shared_memory);
 			fclose(fp);
 
 			sprintf(buffer, "/proc/%d/status", process_id);
 			fp = fopen(buffer, "r");
+			if (fp == NULL)
+				continue;
+
 			fscanf(fp, "%*s %s", command);
 			fgetc(fp);
 			fscanf(fp, "%*[^\n]"); // umask
@@ -606,35 +639,12 @@ void data_refresh() {
 			process.shared_memory = shared_memory;
 			process.status = status;
 			process.time = utime + stime;
-			// CPU
 			process.cpu_usage = 0;
-
-			// Mem
-			process.memory_usage = 0;
+			process.memory_usage = 100 * resident_set_memory / mem_total;
 			strcpy(process.command, command);
 			add_node(process);
 			process_count++;
 		}
 	}
 	closedir(dp);
-
-	// 메모리 사용량
-	fp = fopen("/proc/meminfo", "r");
-	fscanf(fp, "%*s %d kB", &mem_total);
-	fscanf(fp, "%*s %d kB", &mem_free);
-	fscanf(fp, "%*s %d kB", &mem_available);
-	fscanf(fp, "%*s %d kB", &mem_buffer);
-	fscanf(fp, "%*s %d kB", &mem_cache);
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %*d kB");
-	fscanf(fp, "%*s %d kB", &swap_total);
-	fscanf(fp, "%*s %d kB", &swap_free);
-	fclose(fp);
 }
