@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/time.h>
 
 
 struct process {
@@ -51,8 +52,9 @@ char buffer[512];
 int width, height;
 int x, y;
 int ch;
-time_t t, last_update_time;
+time_t t;
 struct tm tm;
+struct timeval now, last_update_time;
 
 FILE *fp;
 
@@ -462,11 +464,23 @@ void data_refresh() {
 	// 현재 시간 구하기
 	t = time(NULL);
 	tm = *localtime(&t);
+	gettimeofday(&now, NULL);
+
+	if (now.tv_usec < last_update_time.tv_usec) {
+		now.tv_sec--;
+		now.tv_usec += 1000000;
+	}
+	long diff = (now.tv_sec - last_update_time.tv_sec) * 1000000 + now.tv_usec - last_update_time.tv_usec;
+	fprintf(stderr, "diff = %ld\n", diff);
+	if (diff < 500000)
+		return;
+
+	last_update_time = now;
 
 	clear_non_visited_nodes();
 	clear_visit();
 
-	last_update_time = t;
+	last_update_time = now;
 
 	// 부팅 시간 구하기
 	fp = fopen("/proc/uptime", "r");
