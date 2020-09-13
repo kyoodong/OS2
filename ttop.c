@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pwd.h>
 #include <sys/time.h>
 
 
@@ -237,7 +238,7 @@ void print_main() {
 	printw(buffer);
 
 	sprintf(buffer, "%s  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f st\n",
-			"%%CPU",
+			"%%CPU(s):",
 			(float) cpu_user / cpu_total * 100,
 			(float) cpu_system / cpu_total * 100,
 			(float) cpu_nice / cpu_total * 100,
@@ -250,12 +251,12 @@ void print_main() {
 	buffer[width] = '\0';
 	printw(buffer);
 
-	sprintf(buffer, "KiB Mem : %d total,  %d free,  %d used,  %d buff/cache\n",
+	sprintf(buffer, "KiB Mem : %8d total, %8d free, %8d used, %8d buff/cache\n",
 			mem_total, mem_free, mem_total - mem_free, mem_buffer + mem_cache);
 	buffer[width] = '\0';
 	printw(buffer);
 
-	sprintf(buffer, "KiB Swap:  %d total,  %d free, %d used,  %d avail Mem\n",
+	sprintf(buffer, "KiB Swap: %8d total, %8d free, %8d used, %8d avail Mem\n",
 			swap_total, swap_free, swap_total - swap_free, mem_available);
 	buffer[width] = '\0';
 	printw(buffer);
@@ -319,7 +320,6 @@ void print_sub() {
 				node->process.command
 		);
 		buffer[sub_width] = '\0';
-		buffer[sub_width] = '\n';
 		wprintw(sub_window, buffer);
 
 		node = node->next;
@@ -348,8 +348,7 @@ void print_sub() {
 			time_buffer,
 			node->process.command
 	);
-	buffer[sub_width - 1] = '\0';
-	buffer[sub_width] = '\n';
+	buffer[sub_width] = '\0';
 	wprintw(sub_window, buffer);
 
 	wrefresh(sub_window);
@@ -596,6 +595,9 @@ void data_refresh() {
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // kstkeip, signal, blocked, sigignore, sigcatch 
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // wchan, nswap, cnswap, exit_signal, processor
 
+			// Byte -> KB 단위
+			virtual_memory /= 1024;
+
 			fclose(fp);
 
 			sprintf(buffer, "/proc/%d/statm", process_id);
@@ -611,11 +613,11 @@ void data_refresh() {
 			if (fp == NULL)
 				continue;
 
-			fscanf(fp, "%*s %s", command);
+			fscanf(fp, "%*s %[^\n]", command);
 			fgetc(fp);
 			fscanf(fp, "%*[^\n]"); // umask
 			fgetc(fp);
-			fscanf(fp, "%*[^\n]"); // State
+			fscanf(fp, "%*s %c %*[^\n]", &status); // State
 			fgetc(fp);
 			fscanf(fp, "%*[^\n]"); // Tgid
 			fgetc(fp);
@@ -630,12 +632,6 @@ void data_refresh() {
 			fscanf(fp, "%*s%d%d%d%d", &ruid, &euid, &suid, &fuid);
 			fclose(fp);
 
-			int i;
-			for (i = 0; i < user_count; i++) {
-				if (userlist[i].uid == ruid) {
-					break;
-				}
-			}
 
 			switch (status) {
 				case 'T':
@@ -643,6 +639,7 @@ void data_refresh() {
 					break;
 
 				case 'S':
+				//case 'D':
 					sleeping_process_count++;
 					break;
 
@@ -655,14 +652,29 @@ void data_refresh() {
 					break;
 
 				default:
-					//printf("%c\n", status);
 					break;
 			}
 
 			struct process process;
 
 			process.pid = process_id;
-			strcpy(process.user, userlist[i].name);
+			int i;
+			for (i = 0; i < user_count; i++) {
+				if (userlist[i].uid == ruid) {
+					break;
+				}
+			}
+
+			if (i == user_count) {
+				struct passwd *pw = getpwuid(uid);
+				if (pw != NULL) {
+					strncpy(process.user, pw->pw_name, 8);
+					process.user[7] = '+';
+					process.user[8] = '\0';
+				}
+			} else {
+				strcpy(process.user, userlist[i].name);
+			}
 			process.priority = priority;
 			process.nice = nice;
 			process.virtual_memory = virtual_memory;
