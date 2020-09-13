@@ -50,6 +50,7 @@ struct node *head, *tail;
 struct node *top;
 char buffer[512];
 
+int sub_height, sub_width;
 int width, height;
 int x, y;
 int ch;
@@ -276,7 +277,6 @@ void print_main() {
 }
 
 void print_sub() {
-	int sub_height, sub_width;
 	getmaxyx(sub_window, sub_height, sub_width);
 	
 	long hz = sysconf(_SC_CLK_TCK);
@@ -438,6 +438,7 @@ int main(int argc, char **argv) {
 
 	top = head;
 	print_sub();
+	struct node *node = NULL;
 
 	while ((ch = getch()) != 'q') {
 		switch (ch) {
@@ -454,6 +455,16 @@ int main(int argc, char **argv) {
 			break;
 
 		case KEY_DOWN:
+			node = top;
+			for (int i = 0; i < sub_height; i++) {
+				if (node == NULL)
+					break;
+				node = node->next;
+			}
+
+			if (node == NULL)
+				break;
+
 			data_refresh();
 			print_main();
 
