@@ -255,7 +255,7 @@ void print_main() {
 	printw(buffer);
 
 	sprintf(buffer, "KiB Mem : %8d total, %8d free, %8d used, %8d buff/cache\n",
-			mem_total, mem_free, mem_total - (mem_free + mem_buffer + mem_cache + mem_kreclaimable), mem_buffer + mem_cache + mem_slab);
+			mem_total, mem_free, mem_total - (mem_free + mem_buffer + mem_cache + mem_kreclaimable), mem_buffer + mem_cache + mem_kreclaimable);
 	buffer[width] = '\0';
 	printw(buffer);
 
@@ -293,6 +293,7 @@ void print_sub() {
 	char time_buffer[12];
 	node = top;
 	wmove(sub_window, 0, 0);
+	werase(sub_window);
 
 	// 출력
 	for (int i = 0; i < sub_height-1; i++) {
@@ -616,6 +617,10 @@ void data_refresh() {
 
 			fscanf(fp, "%*d %ld %ld", &resident_set_memory, &shared_memory);
 			fclose(fp);
+
+			int page_size = getpagesize() / 1024;
+			resident_set_memory *= page_size;
+			shared_memory *= page_size;
 
 			sprintf(buffer, "/proc/%d/status", process_id);
 			fp = fopen(buffer, "r");
