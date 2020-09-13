@@ -583,16 +583,12 @@ void data_refresh() {
 			break;
 		fscanf(fp, "%*[^\n]");
 	}
-	fprintf(stderr, "cpu_count = %d\n", cpu_count);
 	fclose(fp);
 
 	old_cpu_total = cpu_total;
 	//cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal + cpu_guest, cpu_guest_nice;
 	cpu_total = cpu_user + cpu_system + cpu_nice + cpu_idle;
 	cpu_total /= cpu_count;
-	fprintf(stderr, "cpu_user = %u, cpu_system = %u, cpu_nice = %u\n", cpu_user, cpu_system, cpu_nice);
-	fprintf(stderr, "cpu_idle = %u, cpu_iowait %u, cpu_irq = %u\n", cpu_idle, cpu_iowait, cpu_irq);
-	fprintf(stderr, " cpu_softirq= %u, cpu_steal %u, cpu_guest = %u\n", cpu_softirq, cpu_steal, cpu_guest);
 
 	// 모든 프로세스 정리
 	process_count = 0;
@@ -724,7 +720,6 @@ void data_refresh() {
 				strcpy(process.user, userlist[i].name);
 			}
 
-			fprintf(stderr, "pid = %d, utime = %lu, stime = %lu, cutime = %lu, cstime = %lu\n", process_id, utime, stime, cutime, cstime);
 			process.priority = priority;
 			process.nice = nice;
 			process.virtual_memory = virtual_memory;
@@ -733,7 +728,9 @@ void data_refresh() {
 			process.status = status;
 			process.time = utime + stime + cutime + cstime;
 			process.cpu_usage = 0;
-			process.memory_usage = 100 * resident_set_memory / mem_total;
+			process.memory_usage = 100. * resident_set_memory / mem_total;
+			fprintf(stderr, "res = %lu mem_total = %u\n", resident_set_memory, mem_total);
+			fprintf(stderr, "mem_usage = %f\n", process.memory_usage);
 			strcpy(process.command, command);
 			add_node(process);
 			process_count++;
