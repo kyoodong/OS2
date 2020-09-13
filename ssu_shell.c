@@ -175,6 +175,22 @@ char **has_pipe(char **tokens) {
 
 
 void ttop() {
+	pid_t pid = fork();
+	int status;
+	if (pid < 0) {
+		fprintf(stderr, "fork 에러 발생\n");
+		exit(1);
+	}
+
+	if (pid == 0) {
+		execlp("./ttop", "ttop", NULL);
+		exit(1);
+	}
+
+	wait(&status);
+
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+		printf("SSUShell : Incorrect command\n");
 }
 
 void pps() {
