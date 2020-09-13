@@ -85,6 +85,8 @@ int cpu_iowait;
 int cpu_irq;
 int cpu_softirq;
 int cpu_steal;
+int cpu_guest;
+int cpu_guest_nice;
 int cpu_total;
 int old_cpu_total;
 int cpu_total_diff;
@@ -96,6 +98,7 @@ int mem_free;
 int mem_available;
 int mem_buffer;
 int mem_cache;
+int mem_kreclaimable;
 int swap_total;
 int swap_free;
 
@@ -252,7 +255,7 @@ void print_main() {
 	printw(buffer);
 
 	sprintf(buffer, "KiB Mem : %8d total, %8d free, %8d used, %8d buff/cache\n",
-			mem_total, mem_free, mem_total - mem_free, mem_buffer + mem_cache);
+			mem_total, mem_free, mem_total - (mem_free + mem_buffer + mem_cache + mem_kreclaimable), mem_buffer + mem_cache + mem_slab);
 	buffer[width] = '\0';
 	printw(buffer);
 
@@ -522,12 +525,12 @@ void data_refresh() {
 
 	// CPU 사용량
 	fp = fopen("/proc/stat", "r");
-	fscanf(fp, "%*s %d %d %d %d %d %d %d %d",
+	fscanf(fp, "%*s %d %d %d %d %d %d %d %d %d %d",
 			&cpu_user, &cpu_nice, &cpu_system, &cpu_idle,
-			&cpu_iowait, &cpu_irq, &cpu_softirq, &cpu_steal);
+			&cpu_iowait, &cpu_irq, &cpu_softirq, &cpu_steal, &cpu_guest, &cpu_guest_nice);
 	fclose(fp);
 
-	cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal;
+	cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal + cpu_guest, cpu_guest_nice;
 	//cpu_total = cpu_user + cpu_system;
 
 	fprintf(stderr, "cpu_total_diff = %d\n", cpu_total_diff);
@@ -541,7 +544,7 @@ void data_refresh() {
 	fscanf(fp, "%*s %d kB", &mem_available);
 	fscanf(fp, "%*s %d kB", &mem_buffer);
 	fscanf(fp, "%*s %d kB", &mem_cache);
-	fscanf(fp, "%*s %*d kB");
+	fscanf(fp, "%*s %*d kB"); // swap cache
 	fscanf(fp, "%*s %*d kB");
 	fscanf(fp, "%*s %*d kB");
 	fscanf(fp, "%*s %*d kB");
@@ -552,6 +555,12 @@ void data_refresh() {
 	fscanf(fp, "%*s %*d kB");
 	fscanf(fp, "%*s %d kB", &swap_total);
 	fscanf(fp, "%*s %d kB", &swap_free);
+	fscanf(fp, "%*s %*d kB"); // Dirty
+	fscanf(fp, "%*s %*d kB"); // Writeback
+	fscanf(fp, "%*s %*d kB"); // AnonPage
+	fscanf(fp, "%*s %*d kB"); // Mapped
+	fscanf(fp, "%*s %*d kB"); // Shmem
+	fscanf(fp, "%*s %d kB", &mem_kreclaimable); // KReclaimable
 	fclose(fp);
 
 	// 모든 프로세스 정리
