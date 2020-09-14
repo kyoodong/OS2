@@ -274,6 +274,7 @@ void print_main() {
 			"PID", "USER", "PR", "NI", "VIRT", "RES", "SHR", "S", "%%CPU", "%%MEM", "TIME+");
 	buffer[width] = '\0';
 	printw(buffer);
+	wrefresh(main_window);
 }
 
 void print_sub() {
@@ -307,10 +308,14 @@ void print_sub() {
 		unsigned long t = node->process.time;
 		unsigned long min, sec, mils;
 
+		fprintf(stderr, "pid = %d\n", node->process.pid);
+		fprintf(stderr, "t = %lu ", t);
 		min = t / (hz * 60);
+		fprintf(stderr, "min = %lu t = %lu\t", min, t);
 		t %= (60 * hz);
 		sec = t / hz;
 		mils = t % hz;
+		fprintf(stderr, "sec = %lu mils = %lu\n", sec, mils);
 
 		sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
 		sprintf(buffer, "%6d%9s%8ld%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s\n",
@@ -333,7 +338,6 @@ void print_sub() {
 		node = node->next;
 	}
 
-	fprintf(stderr, "pid = %d\n", node->process.pid);
 	unsigned long t = node->process.time;
 	unsigned long min, sec, mils;
 
@@ -634,6 +638,7 @@ void data_refresh() {
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // rsslim, startcode, endcode, startstack, kstkesp
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // kstkeip, signal, blocked, sigignore, sigcatch 
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // wchan, nswap, cnswap, exit_signal, processor
+			fprintf(stderr, "pid = %d, utime = %lu, stime = %lu\n", process_id, utime, stime);
 
 			// Byte -> KB 단위
 			virtual_memory /= 1024;
@@ -726,11 +731,9 @@ void data_refresh() {
 			process.resident_set_memory = resident_set_memory;
 			process.shared_memory = shared_memory;
 			process.status = status;
-			process.time = utime + stime + cutime + cstime;
+			process.time = utime + stime;
 			process.cpu_usage = 0;
 			process.memory_usage = 100. * resident_set_memory / mem_total;
-			fprintf(stderr, "res = %lu mem_total = %u\n", resident_set_memory, mem_total);
-			fprintf(stderr, "mem_usage = %f\n", process.memory_usage);
 			strcpy(process.command, command);
 			add_node(process);
 			process_count++;
