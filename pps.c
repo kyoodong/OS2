@@ -5,13 +5,15 @@
 #include <string.h>
 #include <pwd.h>
 #include <fcntl.h>
+#include <time.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 
 #define COMMAND_SIZE 512
 
 struct process {
-	char user[8];
+	char user[9];
 	int pid;
 	float cpu_usage;
 	float memory_usage;
@@ -19,7 +21,7 @@ struct process {
 	int resident_set_memory_size;
 	char tty[8];
 	char status[20];
-	unsigned long start;
+	struct tm starttime;
 	unsigned long cumulative_cpu_time;
 	char command[COMMAND_SIZE];
 };
@@ -37,6 +39,7 @@ struct node *tail;
 int uptime;
 int a_opt, u_opt, x_opt;
 
+int hz;
 int width, height;
 int user_flag;
 int pid_flag = 1;
@@ -79,6 +82,8 @@ int main(int argc, char **argv) {
 	char command[COMMAND_SIZE];
 	uid_t euid, root_euid, uid;
 	unsigned long utime, stime;
+	int cpu_user, cpu_nice, cpu_system, cpu_idle;
+	int cpu_total, mem_total;
 
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 	width = w.ws_col;
@@ -90,9 +95,17 @@ int main(int argc, char **argv) {
 				stat_flag = 1;
 				time_length = 4;
 			}
-			if (argv[1][i] == 'u')
+			if (argv[1][i] == 'u') {
 				u_opt = 1;
-			if (argv[1][i] == 'x') {
+				user_flag = 1;
+				cpu_flag = 1;
+				mem_flag = 1;
+				vsz_flag = 1;
+				rss_flag = 1;
+				stat_flag = 1;
+				start_flag = 1;
+				time_length = 4;
+			} if (argv[1][i] == 'x') {
 				x_opt = 1;
 				stat_flag = 1;
 				time_length = 4;
@@ -120,6 +133,12 @@ int main(int argc, char **argv) {
 	fscanf(fp, "%d", &uptime);
 	fclose(fp);
 
+	fp = fopen("/proc/meminfo", "r");
+	fscanf(fp, "%*s %d kB", &mem_total);
+	fclose(fp);
+
+	hz = sysconf(_SC_CLK_TCK);
+
 	dp = opendir("/proc");
 	if (dp == NULL) {
 		fprintf(stderr, "/proc open error");
@@ -133,12 +152,12 @@ int main(int argc, char **argv) {
 		int process_id = atoi(dir->d_name);
 		int session_id, tpgid, pgrp, vmlck;
 		struct process process;
-		int hz;
-		long resident_set_memory;
+		long resident_set_memory, process_uptime;
 		unsigned long virtual_memory, priority, nice;
-		unsigned long long starttime, process_uptime;
+		unsigned long long starttime;
 		char tty[256];
 		char status;
+		int processor;
 
 
 		if (!process_id)
@@ -154,6 +173,7 @@ int main(int argc, char **argv) {
 		fscanf(fp, "%*d %d %*d %*d %*d %*d %*d", &tpgid);
 		fscanf(fp, "%lu %lu %*d %*d", &utime, &stime);
 		fscanf(fp, "%ld %ld %*d %*d %llu %lu %ld", &priority, &nice, &starttime, &virtual_memory, &resident_set_memory);
+		fscanf(fp, "%*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %d", &processor);
 		fclose(fp);
 
 		// Byte -> KB 단위
@@ -162,8 +182,11 @@ int main(int argc, char **argv) {
 		int page_size = getpagesize() / 1024;
 		resident_set_memory *= page_size;
 
-		hz = sysconf(_SC_CLK_TCK);
-		process_uptime = uptime - (starttime / hz);
+		starttime /= hz;
+		process_uptime = uptime - starttime;
+		time_t t = time(NULL);
+		t -= process_uptime;
+		struct tm tm = *localtime(&t);
 
 		strcat(buffer, "us");
 		fp = fopen(buffer, "r");
@@ -195,8 +218,29 @@ int main(int argc, char **argv) {
 		memset(process.status, 0, sizeof(process.status));
 		process.status[0] = status;
 
-		int pass_flag = 0;
+		fp = fopen("/proc/stat", "r");
+		fscanf(fp, "%*[^\n]\n");
+	
+		while (1) {
+			char cpu_buf[20];
+			char *cp;
+			int cpu_num;
 
+			fscanf(fp, "%s", cpu_buf);
+			cp = cpu_buf + 3;
+			cpu_num = atoi(cp);
+			if (cpu_num == processor) {
+				fscanf(fp, "%d %d %d %d", &cpu_user, &cpu_nice, &cpu_system, &cpu_idle);
+				break;
+			}
+			fscanf(fp, "%*[^\n]");
+		}
+		fclose(fp);
+	
+		cpu_total = (cpu_user + cpu_system + cpu_nice + cpu_idle);
+	
+		int pass_flag = 1;
+	
 		// 아무 옵션 없는 경우
 		if (!a_opt && !u_opt && !x_opt) {
 			if (session_id != root_session_id || euid != root_euid)
@@ -210,11 +254,13 @@ int main(int argc, char **argv) {
 			}
 		}
 
-		if (pass_flag && a_opt) {
+		if (pass_flag && (a_opt || u_opt)) {
 			if (readlink(buffer, tty, sizeof(tty)) < 0) {
 				pass_flag = 1;
 			}
 			else if (!strcmp(tty, "/dev/null"))
+				pass_flag = 1;
+			else if (u_opt && euid != root_euid)
 				pass_flag = 1;
 			else
 				pass_flag = 0;
@@ -233,7 +279,7 @@ int main(int argc, char **argv) {
 		if (pass_flag)
 			continue;
 
-		if (a_opt || x_opt) {
+		if (a_opt || x_opt || u_opt) {
 			char buf[COMMAND_SIZE];
 			sprintf(buffer, "/proc/%d/cmdline", process_id);
 			fp = fopen(buffer, "r");
@@ -296,6 +342,7 @@ int main(int argc, char **argv) {
 			if (count > 1)
 				strcat(process.status, "l");
 
+			//printf("pid = %d pgrp =  %d tpgid = %d\n", process_id, pgrp, tpgid);
 			if (pgrp == tpgid)
 				strcat(process.status, "+");
 		}
@@ -303,20 +350,21 @@ int main(int argc, char **argv) {
 		process.pid = process_id;
 		passwd = getpwuid(uid);
 		memset(process.user, 0, sizeof(process.user));
-		strncpy(process.user, passwd->pw_name, sizeof(process.user) - 1);
+		strncpy(process.user, passwd->pw_name, sizeof(process.user));
 		if (strlen(passwd->pw_name) > sizeof(process.user)) {
-			process.user[sizeof(process.user) - 2] = '+';
+			process.user[sizeof(process.user) - 1] = '+';
 		}
 		if (!strcmp(tty, "/dev/null") || strlen(tty) == 0)
 			strcpy(process.tty, "?");
 		else
 			strcpy(process.tty, tty + 5);
 		strcpy(process.command, command);
-		process.cumulative_cpu_time = (utime + stime) / hz;
+		process.cumulative_cpu_time = utime + stime;
 		process.virtual_memory_size = virtual_memory;
 		process.resident_set_memory_size = resident_set_memory;
-		process.cpu_usage = 0;
-		process.memory_usage = 0;
+		process.cpu_usage = 100 * (float) process.cumulative_cpu_time / cpu_total;
+		process.memory_usage = 100. * resident_set_memory / mem_total;
+		process.starttime = tm;
 		add_node(process);
 	}
 	closedir(dp);
@@ -324,31 +372,31 @@ int main(int argc, char **argv) {
 	struct node *node = head;
 
 	if (user_flag)
-		printf("%8s ", "USER");
+		printf("%-8s ", "USER");
 
 	if (pid_flag)
 		printf("%6s ", "PID");
 
 	if (cpu_flag)
-		printf("%5s ", "%%CPU");
+		printf("%5s ", "%CPU");
 
 	if (mem_flag)
-		printf("%5s ", "%%MEM");
+		printf("%5s ", "%MEM");
 
 	if (vsz_flag)
-		printf("%6s ", "VSZ");
+		printf("%8s ", "VSZ");
 
 	if (rss_flag)
-		printf("%6s ", "RSS");
+		printf("%8s ", "RSS");
 
 	if (tty_flag)
-		printf("%-12s ", "TTY");
+		printf("%-9s ", "TTY");
 
 	if (stat_flag)
 		printf("%-6s ", "STAT");
 
 	if (start_flag)
-		printf("%8s ", "START");
+		printf("%-5s ", "START");
 
 	if (time_flag) {
 		if (time_length == 8)
@@ -363,7 +411,7 @@ int main(int argc, char **argv) {
 	printf("\n");
 
 	while (node) {
-		unsigned long t = node->process.cumulative_cpu_time;
+		unsigned long t = node->process.cumulative_cpu_time / hz;
 		int hour, min, sec;
 		hour = t / (60 * 60);
 		t %= (60 * 60);
@@ -380,25 +428,25 @@ int main(int argc, char **argv) {
 			cp += sprintf(cp, "%6d ", node->process.pid);
 
 		if (cpu_flag)
-			cp += sprintf(cp, "%5f ", node->process.cpu_usage);
+			cp += sprintf(cp, "%5.1f ", node->process.cpu_usage);
 
 		if (mem_flag)
-			cp += sprintf(cp, "%5f ", node->process.memory_usage);
+			cp += sprintf(cp, "%5.1f ", node->process.memory_usage);
 	
 		if (vsz_flag)
-			cp += sprintf(cp, "%6d ", node->process.virtual_memory_size);
+			cp += sprintf(cp, "%8d ", node->process.virtual_memory_size);
 	
 		if (rss_flag)
-			cp += sprintf(cp, "%6d ", node->process.resident_set_memory_size);
+			cp += sprintf(cp, "%8d ", node->process.resident_set_memory_size);
 	
 		if (tty_flag)
-			cp += sprintf(cp, "%-12s ", node->process.tty);
+			cp += sprintf(cp, "%-9s ", node->process.tty);
 	
 		if (stat_flag)
 			cp += sprintf(cp, "%-6s ", node->process.status);
 	
 		if (start_flag)
-			cp += sprintf(cp, "%8lu ", node->process.start);
+			cp += sprintf(cp, "%02d:%02d ", node->process.starttime.tm_hour, node->process.starttime.tm_min);
 	
 		if (time_flag) {
 			if (time_length == 8)

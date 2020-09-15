@@ -1,6 +1,6 @@
 main: clear ttop pps
 	gcc ssu_shell.c -o ssu_shell
-	./pps x
+	./pps u
 #./ssu_shell
 
 debug: clear
