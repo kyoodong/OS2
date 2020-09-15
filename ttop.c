@@ -36,18 +36,11 @@ struct node {
 	int visit;
 };
 
-// 사용자
-struct user {
-	int uid;
-	char name[9];
-};
-
 void data_refresh();
 
 
 struct sigaction act;
 struct sigaction act_alarm;
-struct user userlist[128];
 int user_process_count;
 struct node *head, *tail;
 struct node *top;
@@ -451,27 +444,6 @@ int main(int argc, char **argv) {
 	// 전체 터미널 크기 측정
 	getmaxyx(stdscr, height, width);
 
-	fp = fopen("/etc/passwd", "r");
-	if (fp == NULL) {
-		fprintf(stderr, "/etc/passwd open error\n");
-		exit(1);
-	}
-
-	char buf[64];
-	int uid;
-	while (fscanf(fp, "%[^:]:%*[^:]:%d", buf, &uid) == 2) {
-		userlist[user_count].uid = uid;
-		strncpy(userlist[user_count].name, buf, 8);
-		if (strlen(buf) > 8)
-			userlist[user_count].name[7] = '+';
-		userlist[user_count].name[8] = '\0';
-
-		user_count++;
-		fscanf(fp, "%*[^\n]");
-		fgetc(fp);
-	}
-	fclose(fp);
-
 	data_refresh();
 
 	print_main();
@@ -655,7 +627,6 @@ void data_refresh() {
 			int process_id = atoi(dir->d_name);
 			char status;
 			char command[1024];
-			int uid;
 			long priority, nice, resident_set_memory, shared_memory;
 			unsigned long utime, stime, cutime, cstime, virtual_memory;
 			unsigned long long starttime;
@@ -748,22 +719,13 @@ void data_refresh() {
 			struct process process;
 
 			process.pid = process_id;
-			int i;
-			for (i = 0; i < user_count; i++) {
-				if (userlist[i].uid == ruid) {
-					break;
-				}
-			}
-
-			if (i == user_count) {
-				struct passwd *pw = getpwuid(uid);
-				if (pw != NULL) {
-					strncpy(process.user, pw->pw_name, 8);
+			struct passwd *pw = getpwuid(ruid);
+			if (pw != NULL) {
+				strncpy(process.user, pw->pw_name, 8);
+				if (strlen(process.user) > sizeof(process.user)) {
 					process.user[7] = '+';
 					process.user[8] = '\0';
 				}
-			} else {
-				strcpy(process.user, userlist[i].name);
 			}
 
 			process.priority = priority;
