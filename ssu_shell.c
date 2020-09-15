@@ -130,17 +130,15 @@ void process(char **tokens) {
 		}
 		// ttop 명령어
 		if (!strcmp(tokens[0], "ttop")) {
-			ttop();
+			sprintf(tokens[0], "./ttop");
 		}
 		
 		// pps 명령어
 		else if (!strcmp(tokens[0], "pps")) {
-			//pps();
+			sprintf(tokens[0], "./pps");
 		}
 		
-		else {
-			run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
-		}
+		run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
 		prev_pipe = cur_pipe;
 		cur_pipe = 0;
 
@@ -171,30 +169,6 @@ char **has_pipe(char **tokens) {
 		tokens++;
 	}
 	return NULL;
-}
-
-
-void ttop() {
-	pid_t pid = fork();
-	int status;
-	if (pid < 0) {
-		fprintf(stderr, "fork 에러 발생\n");
-		exit(1);
-	}
-
-	if (pid == 0) {
-		execlp("./ttop", "ttop", NULL);
-		exit(1);
-	}
-
-	wait(&status);
-
-	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-		printf("SSUShell : Incorrect command\n");
-}
-
-void pps() {
-
 }
 
 void run_op(const char *op, char **params, int input_redirection, int output_redirection, int input_pipe_fd, int output_pipe_fd) {

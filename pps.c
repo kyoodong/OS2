@@ -152,8 +152,8 @@ int main(int argc, char **argv) {
 		int process_id = atoi(dir->d_name);
 		int session_id, tpgid, pgrp, vmlck;
 		struct process process;
-		long resident_set_memory, process_uptime;
-		unsigned long virtual_memory, priority, nice;
+		long resident_set_memory, process_uptime, nice, priority;
+		unsigned long virtual_memory;
 		unsigned long long starttime;
 		char tty[256];
 		char status;
@@ -260,7 +260,7 @@ int main(int argc, char **argv) {
 			}
 			else if (!strcmp(tty, "/dev/null"))
 				pass_flag = 1;
-			else if (u_opt && euid != root_euid)
+			else if (!a_opt && u_opt && euid != root_euid)
 				pass_flag = 1;
 			else
 				pass_flag = 0;
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
 				pass_flag = 0;
 		}
 
-		if (pass_flag)
+		if (!(a_opt && x_opt) && pass_flag)
 			continue;
 
 		if (a_opt || x_opt || u_opt) {
@@ -327,10 +327,10 @@ int main(int argc, char **argv) {
 				count++;
 			}
 
-			if (nice > 0)
+			if (nice < 0)
 				strcat(process.status, "<");
 
-			if (nice < 0)
+			if (nice > 0)
 				strcat(process.status, "N");
 
 			if (vmlck != 0)
@@ -353,6 +353,7 @@ int main(int argc, char **argv) {
 		strncpy(process.user, passwd->pw_name, sizeof(process.user));
 		if (strlen(passwd->pw_name) > sizeof(process.user)) {
 			process.user[sizeof(process.user) - 1] = '+';
+			process.user[sizeof(process.user)] = '\0';
 		}
 		if (!strcmp(tty, "/dev/null") || strlen(tty) == 0)
 			strcpy(process.tty, "?");
@@ -372,16 +373,16 @@ int main(int argc, char **argv) {
 	struct node *node = head;
 
 	if (user_flag)
-		printf("%-8s ", "USER");
+		printf("%-9s ", "USER");
 
 	if (pid_flag)
-		printf("%6s ", "PID");
+		printf("%4s ", "PID");
 
 	if (cpu_flag)
-		printf("%5s ", "%CPU");
+		printf("%4s ", "%CPU");
 
 	if (mem_flag)
-		printf("%5s ", "%MEM");
+		printf("%4s ", "%MEM");
 
 	if (vsz_flag)
 		printf("%8s ", "VSZ");
@@ -393,7 +394,7 @@ int main(int argc, char **argv) {
 		printf("%-9s ", "TTY");
 
 	if (stat_flag)
-		printf("%-6s ", "STAT");
+		printf("%-5s ", "STAT");
 
 	if (start_flag)
 		printf("%-5s ", "START");
@@ -422,16 +423,16 @@ int main(int argc, char **argv) {
 		char *cp = buffer;
 		memset(buffer, 0, sizeof(buffer));
 		if (user_flag)
-			cp += sprintf(cp, "%8s ", node->process.user);
+			cp += sprintf(cp, "%-9s ", node->process.user);
 
 		if (pid_flag)
-			cp += sprintf(cp, "%6d ", node->process.pid);
+			cp += sprintf(cp, "%4d ", node->process.pid);
 
 		if (cpu_flag)
-			cp += sprintf(cp, "%5.1f ", node->process.cpu_usage);
+			cp += sprintf(cp, "%4.1f ", node->process.cpu_usage);
 
 		if (mem_flag)
-			cp += sprintf(cp, "%5.1f ", node->process.memory_usage);
+			cp += sprintf(cp, "%4.1f ", node->process.memory_usage);
 	
 		if (vsz_flag)
 			cp += sprintf(cp, "%8d ", node->process.virtual_memory_size);
@@ -443,7 +444,7 @@ int main(int argc, char **argv) {
 			cp += sprintf(cp, "%-9s ", node->process.tty);
 	
 		if (stat_flag)
-			cp += sprintf(cp, "%-6s ", node->process.status);
+			cp += sprintf(cp, "%-5s ", node->process.status);
 	
 		if (start_flag)
 			cp += sprintf(cp, "%02d:%02d ", node->process.starttime.tm_hour, node->process.starttime.tm_min);
