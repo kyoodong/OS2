@@ -205,6 +205,6 @@ void run_op(const char *op, char **params, int input_redirection, int output_red
 	// 부모 프로세스
 	wait(&status);
 
-	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+	if (!WIFEXITED(status))
 		printf("SSUShell : Incorrect command\n");
 }
