@@ -143,6 +143,7 @@ void add_node(struct process process) {
 	}
 
 	p = head;
+	// pid 순으로 정렬
 	while (p != NULL && p->process.pid < process.pid) {
 		p = p->next;
 	}
