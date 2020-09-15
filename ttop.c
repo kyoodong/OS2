@@ -402,11 +402,19 @@ void sig_handler(int signo) {
 	exit(1);
 }
 
+/**
+ * 알람 시그널을 처리하는 함수
+ * @param signo
+ */
 void sig_alarm_handler(int signo) {
+    // 데이터 새로고침
 	data_refresh();
+
+	// 출력
 	print_main();
 	print_sub();
 
+	// 3초 뒤 알람 재지정
 	alarm(3);
 }
 
@@ -444,35 +452,53 @@ int main(int argc, char **argv) {
 	// 전체 터미널 크기 측정
 	getmaxyx(stdscr, height, width);
 
+	// 데이터 새로고침
 	data_refresh();
 
+	// 메인 윈도우 출력
 	print_main();
 
+	// 서브 윈도우 생성
 	sub_window = subwin(main_window, height - 7, width, y, x);
+
+	// 키보드 입력 이벤트 등록
 	keypad(stdscr, TRUE);
 
+	// 스크롤 이벤트 등록
 	scrollok(sub_window, TRUE);
 
+	// 서브 윈도우 출력
 	top = head;
 	print_sub();
+
+
 	struct node *node = NULL;
 
+	// q를 누를때까지 반복
 	while ((ch = getch()) != 'q') {
 		switch (ch) {
+		    // 화살표 윗키
 		case KEY_UP:
 			data_refresh();
 			print_main();
 
+			// 스크롤 가능한지 검사
 			if (top->prev == NULL)
 				break;
 
+			// 스크롤
 			top = top->prev;
 			wscrl(sub_window, -1);
 			print_sub();
 			break;
 
+			// 화살표 아래키
 		case KEY_DOWN:
 			node = top;
+            data_refresh();
+            print_main();
+
+			// 스크롤 가능한지 검사
 			for (int i = 0; i < sub_height; i++) {
 				if (node == NULL)
 					break;
@@ -482,9 +508,7 @@ int main(int argc, char **argv) {
 			if (node == NULL)
 				break;
 
-			data_refresh();
-			print_main();
-
+			// 스크롤
 			top = top->next;
 			wscrl(sub_window, 1);
 			print_sub();
@@ -496,12 +520,16 @@ int main(int argc, char **argv) {
 }
 
 
+/**
+ * 프로세스 정보를 새로고침하는 함수
+ */
 void data_refresh() {
 	// 현재 시간 구하기
 	t = time(NULL);
 	tm = *localtime(&t);
 	gettimeofday(&now, NULL);
 
+	// 0.5 초 주기로 새로고침. 너무 빠르게 새로고침하면 파일 오픈 시 에러가 발생함
 	if (now.tv_usec < last_update_time.tv_usec) {
 		now.tv_sec--;
 		now.tv_usec += 1000000;
@@ -511,7 +539,6 @@ void data_refresh() {
 		return;
 
 	last_update_time = now;
-
 
 	// 부팅 시간 구하기
 	fp = fopen("/proc/uptime", "r");
@@ -577,6 +604,8 @@ void data_refresh() {
 	fscanf(fp, "%*s %d kB", &mem_kreclaimable); // KReclaimable
 	fclose(fp);
 
+	// 프로세스 세부 정보는 3초에 한 번 새로고침함
+	// %CPU, %MEM 정보가 최소한의 interval 을 가져야 정확한 값이 나옴
 	if (t - last_sub_update_time < 3)
 		return;
 
@@ -588,8 +617,8 @@ void data_refresh() {
 			&cpu_user, &cpu_nice, &cpu_system, &cpu_idle,
 			&cpu_iowait, &cpu_irq, &cpu_softirq, &cpu_steal, &cpu_guest, &cpu_guest_nice);
 
+	// CPU 평균을 내기 위해 cpu 개수 세기
 	char cpu_buf[10];
-
 	cpu_count = 0;
 	while (1) {
 		fscanf(fp, "%s", cpu_buf);
@@ -602,8 +631,8 @@ void data_refresh() {
 	}
 	fclose(fp);
 
+	// 총 cpu 시간을 측정한 뒤 평균
 	old_cpu_total = cpu_total;
-	//cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal + cpu_guest, cpu_guest_nice;
 	cpu_total = cpu_user + cpu_system + cpu_nice + cpu_idle;
 	cpu_total /= cpu_count;
 
@@ -618,7 +647,6 @@ void data_refresh() {
 	clear_visit();
 
 	dp = opendir("/proc");
-
 	if (dp != NULL) {
 		while ((dir = readdir(dp)) != NULL) {
 			if (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, ".."))
@@ -632,9 +660,12 @@ void data_refresh() {
 			unsigned long long starttime;
 			int ruid, euid, suid, fuid;
 
+            // 디렉토리 이름이 숫자인 것들만 추출
+            // 프로세스에 대한 디렉토리라면 디렉토리 이름은 pid 이기 때문
 			if (process_id == 0)
 				continue;
 
+			// 명령어, 상태, cpu time, priority 등을 추출
 			sprintf(buffer, "/proc/%d/stat", process_id);
 			fp = fopen(buffer, "r");
 			if (fp == NULL)
@@ -650,25 +681,25 @@ void data_refresh() {
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // rsslim, startcode, endcode, startstack, kstkesp
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // kstkeip, signal, blocked, sigignore, sigcatch 
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // wchan, nswap, cnswap, exit_signal, processor
-			fprintf(stderr, "pid = %d, utime = %lu, stime = %lu\n", process_id, utime, stime);
 
 			// Byte -> KB 단위
 			virtual_memory /= 1024;
-
 			fclose(fp);
 
+			// 전체 메모리 크기 추출
 			sprintf(buffer, "/proc/%d/statm", process_id);
 			fp = fopen(buffer, "r");
 			if (fp == NULL)
 				continue;
-
 			fscanf(fp, "%*d %ld %ld", &resident_set_memory, &shared_memory);
 			fclose(fp);
 
+			// 페이지 -> KB 단위 변환
 			int page_size = getpagesize() / 1024;
 			resident_set_memory *= page_size;
 			shared_memory *= page_size;
 
+			// uid 추출
 			sprintf(buffer, "/proc/%d/status", process_id);
 			fp = fopen(buffer, "r");
 			if (fp == NULL)
@@ -692,7 +723,6 @@ void data_refresh() {
 			fgetc(fp);
 			fscanf(fp, "%*s%d%d%d%d", &ruid, &euid, &suid, &fuid);
 			fclose(fp);
-
 
 			switch (status) {
 				case 'T':
@@ -721,6 +751,7 @@ void data_refresh() {
 			process.pid = process_id;
 			struct passwd *pw = getpwuid(ruid);
 			if (pw != NULL) {
+			    // 이름 길이 제한
 				strncpy(process.user, pw->pw_name, 8);
 				if (strlen(process.user) > sizeof(process.user)) {
 					process.user[7] = '+';
