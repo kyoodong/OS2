@@ -13,27 +13,30 @@
 #include <sys/time.h>
 
 
+// 프로세스 구조체
 struct process {
-	pid_t pid;
-	char user[9];
-	long priority;
-	long nice;
-	unsigned long virtual_memory;
-	long resident_set_memory;
-	long shared_memory;
-	char status;
-	float cpu_usage;
-	float memory_usage;
-	unsigned long time;
-	char command[64];
+	pid_t pid;          // pid
+	char user[9];       // 유저 이름
+	long priority;      // 우선 순위
+	long nice;          // nice
+	unsigned long virtual_memory;   // 가상 메모리 크기
+	long resident_set_memory;       // rss 메모리 크기
+	long shared_memory;             // 공유 메모리 크기
+	char status;                    // 프로세스 상태
+	float cpu_usage;                // cpu 사용량 (%)
+	float memory_usage;             // 메모리 사용량 (%)
+	unsigned long time;             // cpu 사용시간 (utime + stime)
+	char command[64];               // 명령어
 };
 
+// 프로세스를 링크드 리스트로 관리하기 위한 노드
 struct node {
 	struct process process;
 	struct node *prev, *next;
 	int visit;
 };
 
+// 사용자
 struct user {
 	int uid;
 	char name[9];
@@ -92,7 +95,6 @@ int cpu_guest_nice;
 int cpu_total;
 int old_cpu_total;
 
-
 int mem_total;
 int mem_free;
 int mem_available;
@@ -102,23 +104,33 @@ int mem_kreclaimable;
 int swap_total;
 int swap_free;
 
+
+/**
+ * 프로세스를 추가하는 함수
+ * @param process 프로세스 객체
+ */
 void add_node(struct process process) {
 	struct node *p = head;
 	long hz = sysconf(_SC_CLK_TCK);
 
+	// 이미 프로세스 리스트가 구축된 경우 이를 새로고침함
 	while (p != NULL) {
+	    // 같은 프로세스 발견
 		if (p->process.pid == process.pid) {
+		    // total cpu time의 변화
 			int cpu_diff = cpu_total - old_cpu_total;
+
+			// 그 동안 현재 프로세스가 사용한 cpu time
 			int time_diff = process.time - p->process.time;
 
 			if (cpu_diff > 0) {
 				process.cpu_usage = 100. * time_diff / cpu_diff;
-				fprintf(stderr, "cpu_diff = %d, time_diff = %d\n", cpu_diff, time_diff);
-				fprintf(stderr, "pid = %d cpu_uage = %.1f\n", process.pid, process.cpu_usage);
 			}
 			else
 				process.cpu_usage = 0;
-			
+
+			// 해당 프로세스는 방문했음을 표시
+			// 모든 프로세스를 검사한 뒤 visit == 0 인 프로세스는 죽은 프로세스로, 리스트에서 삭제
 			p->visit = 1;
 			p->process = process;
 			return;
@@ -126,6 +138,7 @@ void add_node(struct process process) {
 		p = p->next;
 	}
 
+	// 프로세스 추가
 	if (head == NULL) {
 		head = malloc(sizeof(struct node));
 		head->process = process;
@@ -161,6 +174,9 @@ void add_node(struct process process) {
 		tail = new_node;
 }
 
+/**
+ * 프로세스 상태 새로고침 전 visit 변수를 0으로 초기화해주는 함수
+ */
 void clear_visit() {
 	struct node *p = head;
 	while (p != NULL) {
@@ -169,12 +185,17 @@ void clear_visit() {
 	}
 }
 
+/**
+ * 프로세스 노드를 삭제하는 함수
+ * @param node 삭제할 노드
+ */
 void delete_node(struct node *node) {
 	struct node *prev, *next;
 	prev = node->prev;
 	next = node->next;
 
 	if (next != NULL) {
+	    // 현재 화면에 표시중인 top 이 삭제된 경우
 		if (node == top)
 			top = next;
 
@@ -185,6 +206,7 @@ void delete_node(struct node *node) {
 
 
 	if (prev != NULL) {
+        // 현재 화면에 표시중인 top 이 삭제된 경우
 		if (node == top)
 			top = prev;
 
@@ -196,6 +218,9 @@ void delete_node(struct node *node) {
 	free(node);
 }
 
+/**
+ * 프로세스 새로고침 작업 뒤 죽은 프로세스를 없애주는 함수
+ */
 void clear_non_visited_nodes() {
 	struct node *p = head;
 	struct node *next;
@@ -212,12 +237,20 @@ void clear_non_visited_nodes() {
 
 WINDOW *main_window, *sub_window;
 
+/**
+ * 윈도우 삭제해주는 함수
+ * exit 호출 시 실행되도록 등록
+ */
 void window_clear() {
 	delwin(sub_window);
 	delwin(main_window);
 	endwin();
 }
 
+/**
+ * 메인 프레임을 출력하는 함수
+ * 상단부의 스크롤되지 않는 부분이 메인 프레임이다.
+ */
 void print_main() {
 	getmaxyx(main_window, height, width);
 	char buffer[1024];
@@ -277,6 +310,10 @@ void print_main() {
 	wrefresh(main_window);
 }
 
+/**
+ * 서브 윈도우를 출력해주는 함수
+ * 메인 윈도우를 제외한 스크롤되는 프로세스 세부 상태를 표시하는 부분이 서브 윈도우이다.
+ */
 void print_sub() {
 	getmaxyx(sub_window, sub_height, sub_width);
 	
@@ -341,6 +378,7 @@ void print_sub() {
 	unsigned long t = node->process.time;
 	unsigned long min, sec, mils;
 
+	// hz -> 초 단위 변환
 	min = t / (hz * 60);
 	t %= (60 * hz);
 	sec = t / hz;
@@ -365,7 +403,6 @@ void print_sub() {
 	wprintw(sub_window, buffer);
 
 	wrefresh(sub_window);
-
 }
 
 void sig_handler(int signo) {
@@ -382,9 +419,7 @@ void sig_alarm_handler(int signo) {
 
 
 int main(int argc, char **argv) {
-	int fd = open("err.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
-	dup2(fd, 2);
-
+    // 윈도우 정리 함수 등록
 	atexit(window_clear);
 	act.sa_handler = sig_handler;
 	act_alarm.sa_handler = sig_alarm_handler;
@@ -396,10 +431,15 @@ int main(int argc, char **argv) {
 	sigaction(SIGABRT, &act, NULL);
 	sigaction(SIGSEGV, &act, NULL);
 	sigaction(SIGALRM, &act_alarm, NULL);
+
+	// 3초 주기로 새로고침
 	alarm(3);
+
+	// 메인 윈도우 크기
 	x = 0;
 	y = 7;
 
+	// 윈도우 생성
 	if ((main_window = initscr()) == NULL) {
 		fprintf(stderr, "initscr error\n");
 		exit(1);
@@ -408,6 +448,7 @@ int main(int argc, char **argv) {
 	cbreak();
 	noecho();
 
+	// 전체 터미널 크기 측정
 	getmaxyx(stdscr, height, width);
 
 	fp = fopen("/etc/passwd", "r");
