@@ -1,3 +1,5 @@
+// @TODO: zombie 숫자 안맞음
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -48,7 +50,7 @@ int sub_height, sub_width;
 int width, height;
 int x, y;
 int ch;
-time_t t, last_sub_update_time;
+time_t t;
 struct tm tm;
 struct timeval now, last_update_time;
 
@@ -74,15 +76,25 @@ DIR *dp;
 
 int cpu_count;
 int cpu_user;
+int old_cpu_user;
 int cpu_nice;
+int old_cpu_nice;
 int cpu_system;
+int old_cpu_system;
 int cpu_idle;
+int old_cpu_idle;
 int cpu_iowait;
+int old_cpu_iowait;
 int cpu_irq;
+int old_cpu_irq;
 int cpu_softirq;
+int old_cpu_softirq;
 int cpu_steal;
+int old_cpu_steal;
 int cpu_guest;
 int cpu_guest_nice;
+int all_cpu_total;
+int old_all_cpu_total;
 int cpu_total;
 int old_cpu_total;
 
@@ -239,16 +251,18 @@ void print_main() {
 	buffer[width] = '\0';
 	printw(buffer);
 
+	int diff = all_cpu_total - old_all_cpu_total;
+
 	sprintf(buffer, "%s  %.1f us,  %.1f sy,  %.1f ni,  %.1f id,  %.1f wa,  %.1f hi,  %.1f si, %.1f st\n",
 			"%%CPU(s):",
-			(float) cpu_user / cpu_total * 100,
-			(float) cpu_system / cpu_total * 100,
-			(float) cpu_nice / cpu_total * 100,
-			(float) cpu_idle / cpu_total * 100,
-			(float) cpu_iowait / cpu_total * 100,
-			(float) cpu_irq / cpu_total * 100,
-			(float) cpu_softirq / cpu_total * 100,
-			(float) cpu_steal / cpu_total * 100
+			(float) (cpu_user - old_cpu_user) / diff * 100,
+			(float) (cpu_system - old_cpu_system) / diff * 100,
+			(float) (cpu_nice - old_cpu_nice) / diff * 100,
+			(float) (cpu_idle - old_cpu_idle) / diff * 100,
+			(float) (cpu_iowait - old_cpu_iowait) / diff * 100,
+			(float) (cpu_irq - old_cpu_irq) / diff * 100,
+			(float) (cpu_softirq - old_cpu_softirq) / diff * 100,
+			(float) (cpu_steal - old_cpu_steal) / diff * 100
 	);
 	buffer[width] = '\0';
 	printw(buffer);
@@ -423,15 +437,17 @@ int main(int argc, char **argv) {
 			data_refresh();
 			print_main();
 
-			if (top->prev == NULL)
-				break;
-
-			top = top->prev;
-			wscrl(sub_window, -1);
+			if (top->prev != NULL) {
+				top = top->prev;
+				wscrl(sub_window, -1);
+			}
 			print_sub();
 			break;
 
 		case KEY_DOWN:
+			data_refresh();
+			print_main();
+
 			node = top;
 			for (int i = 0; i < sub_height; i++) {
 				if (node == NULL)
@@ -439,14 +455,11 @@ int main(int argc, char **argv) {
 				node = node->next;
 			}
 
-			if (node == NULL)
-				break;
+			if (node != NULL) {
+				top = top->next;
+				wscrl(sub_window, 1);
+			}
 
-			data_refresh();
-			print_main();
-
-			top = top->next;
-			wscrl(sub_window, 1);
 			print_sub();
 			break;
 		}
@@ -467,7 +480,7 @@ void data_refresh() {
 		now.tv_usec += 1000000;
 	}
 	long diff = (now.tv_sec - last_update_time.tv_sec) * 1000000 + now.tv_usec - last_update_time.tv_usec;
-	if (diff < 500000)
+	if (diff < 100000)
 		return;
 
 	last_update_time = now;
@@ -537,10 +550,14 @@ void data_refresh() {
 	fscanf(fp, "%*s %d kB", &mem_kreclaimable); // KReclaimable
 	fclose(fp);
 
-	if (t - last_sub_update_time < 3)
-		return;
-
-	last_sub_update_time = t;
+	old_cpu_user = cpu_user;
+	old_cpu_nice = cpu_nice;
+	old_cpu_system = cpu_system;
+	old_cpu_idle = cpu_idle;
+	old_cpu_iowait = cpu_iowait;
+	old_cpu_irq = cpu_irq;
+	old_cpu_softirq = cpu_softirq;
+	old_cpu_steal = cpu_steal;
 
 	// CPU 사용량
 	fp = fopen("/proc/stat", "r");
@@ -565,6 +582,9 @@ void data_refresh() {
 	old_cpu_total = cpu_total;
 	//cpu_total = cpu_user + cpu_nice + cpu_system + cpu_idle + cpu_iowait + cpu_irq + cpu_softirq + cpu_steal + cpu_guest, cpu_guest_nice;
 	cpu_total = cpu_user + cpu_system + cpu_nice + cpu_idle;
+
+	old_all_cpu_total = all_cpu_total;
+	all_cpu_total = cpu_total;
 	cpu_total /= cpu_count;
 
 	// 모든 프로세스 정리
