@@ -499,7 +499,8 @@ int main(int argc, char **argv) {
 		if (command_flag)
 			cp += sprintf(cp, "%s", node->process.command);
 	
-		buffer[width] = '\0';
+		if (width != 0)
+			buffer[width] = '\0';
 		printf("%s\n", buffer);
 		node = node->next;
 	}
