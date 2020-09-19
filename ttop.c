@@ -720,23 +720,20 @@ void data_refresh() {
 			if (fp == NULL)
 				continue;
 
-			fscanf(fp, "%*s %[^\n]", command);
-			fgetc(fp);
-			fscanf(fp, "%*[^\n]"); // umask
-			fgetc(fp);
-			fscanf(fp, "%*s %c %*[^\n]", &status); // State
-			fgetc(fp);
-			fscanf(fp, "%*[^\n]"); // Tgid
-			fgetc(fp);
-			fscanf(fp, "%*[^\n]"); // Ngid
-			fgetc(fp);
-			fscanf(fp, "%*[^\n]"); // Pid
-			fgetc(fp);
-			fscanf(fp, "%*[^\n]"); // PPid
-			fgetc(fp);
-			fscanf(fp, "%*[^\n]"); // TracerPid
-			fgetc(fp);
-			fscanf(fp, "%*s%d%d%d%d", &ruid, &euid, &suid, &fuid);
+			while (fscanf(fp, "%s", buffer) > 0) {
+				if (!strcmp(buffer, "Name:"))
+					fscanf(fp, "%[^\n]\n", command);
+				else if (!strcmp(buffer, "State:")) {
+					fscanf(fp, " %c %*[^\n]\n", &status);
+				}
+				else if (!strcmp(buffer, "Uid:")) {
+					fscanf(fp, "%d%d%d%d\n", &ruid, &euid, &suid, &fuid);
+				}
+				else
+					fscanf(fp, "%*[^\n]\n");
+			}
+
+
 			fclose(fp);
 
 			switch (status) {

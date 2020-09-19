@@ -4,7 +4,7 @@ main: clear ttop pps
 
 debug: clear
 	gcc ssu_shell.c -g -o ssu_shell_debug -lncurses
-#gdb ./ssu_shell_debug
+	gdb ./ssu_shell_debug
 
 ttop:
 	gcc ttop.c -o ttop -lncurses

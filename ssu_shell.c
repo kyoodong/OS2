@@ -119,6 +119,11 @@ void process(char **tokens) {
 	int input_pipe_fd = -1, output_pipe_fd = -1;
 
 	while (1) {
+		if (tokens[0] == NULL) {
+			fprintf(stderr, "SSUShell : Incorrect command\n");
+			break;
+		}
+
 		p = has_pipe(tokens);
 
 		// 현재 명령어 뒤에 파이프가 있음
