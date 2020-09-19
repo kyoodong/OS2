@@ -698,8 +698,7 @@ void data_refresh() {
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // wchan, nswap, cnswap, exit_signal, processor
 
 			// command 괄호 제거
-			strncpy(command, command + 1, strlen(command) - 1);
-			command[strlen(command) - 2] = '\0';
+			command[strlen(command) - 1] = '\0';
 
 			// Byte -> KB 단위
 			virtual_memory /= 1024;
@@ -782,7 +781,7 @@ void data_refresh() {
 			process.time = utime + stime;
 			process.cpu_usage = 0;
 			process.memory_usage = 100. * resident_set_memory / mem_total;
-			strcpy(process.command, command);
+			strcpy(process.command, command + 1);
 			add_node(process);
 			process_count++;
 		}
