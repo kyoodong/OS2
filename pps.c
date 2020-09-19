@@ -12,6 +12,7 @@
 
 #define COMMAND_SIZE 512
 
+// 프로세스 구조체
 struct process {
 	char user[9];
 	int pid;
@@ -26,13 +27,13 @@ struct process {
 	char command[COMMAND_SIZE];
 };
 
+// 프로세스 링크드 리스트 노드
 struct node {
 	struct node *prev;
 	struct node *next;
 	struct process process;
 };
 
-struct winsize w;
 char buffer[1024];
 struct node *head;
 struct node *tail;
@@ -41,6 +42,8 @@ int a_opt, u_opt, x_opt;
 
 int hz;
 int width, height;
+
+// 옵션마다 출력되는 항목이 다른데 flag 가 on 되면 해당 내용이 화면에 출력됨
 int user_flag;
 int pid_flag = 1;
 int cpu_flag;
@@ -57,6 +60,10 @@ int time_length = 8;
 struct passwd *passwd;
 
 
+/**
+ * 프로세스 노드를 추가하는 함수
+ * @param process
+ */
 void add_node(struct process process) {
 	if (head == NULL) {
 		head = malloc(sizeof(struct node));
@@ -66,6 +73,7 @@ void add_node(struct process process) {
 		return;
 	}
 
+	// 맨 끝에 하나씩 추가함
 	struct node *node = malloc(sizeof(struct node));
 	node->prev = tail;
 	node->next = NULL;
@@ -88,13 +96,17 @@ int main(int argc, char **argv) {
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 	width = w.ws_col;
 
+	// 아규먼트 파싱
 	if (argc > 1) {
 		for (int i = 0; i < 3; i++) {
+		    // a 옵션
 			if (argv[1][i] == 'a') {
 				a_opt = 1;
 				stat_flag = 1;
 				time_length = 4;
 			}
+
+			// u 옵션
 			if (argv[1][i] == 'u') {
 				u_opt = 1;
 				user_flag = 1;
@@ -105,7 +117,10 @@ int main(int argc, char **argv) {
 				stat_flag = 1;
 				start_flag = 1;
 				time_length = 4;
-			} if (argv[1][i] == 'x') {
+			}
+
+			// x 옵션
+			if (argv[1][i] == 'x') {
 				x_opt = 1;
 				stat_flag = 1;
 				time_length = 4;
@@ -114,6 +129,8 @@ int main(int argc, char **argv) {
 	}
 
 	pid = getpid();
+
+	// 세션 아이디 추출
 	sprintf(buffer, "/proc/%d/stat", pid);
 	fp = fopen(buffer, "r");
 	if (fp == NULL) {
@@ -123,8 +140,10 @@ int main(int argc, char **argv) {
 	fscanf(fp, "%*d %*s %*c %*d %*d %d", &root_session_id);
 	fclose(fp);
 
+	// euid 추출
 	root_euid = geteuid();
 
+	// uptime 추출
 	fp = fopen("/proc/uptime", "r");
 	if (fp == NULL) {
 		fprintf(stderr, "/proc/uptime open error\n");
@@ -133,6 +152,7 @@ int main(int argc, char **argv) {
 	fscanf(fp, "%d", &uptime);
 	fclose(fp);
 
+	// 전체 메모리 크기 추출
 	fp = fopen("/proc/meminfo", "r");
 	fscanf(fp, "%*s %d kB", &mem_total);
 	fclose(fp);
@@ -159,7 +179,8 @@ int main(int argc, char **argv) {
 		char status;
 		int processor;
 
-
+        // 디렉토리가 숫자로 이루어진 디렉토리만 취급함
+        // 숫자로 이루어진 디렉토리만이 해당 pid 의 프로세스에 대한 정보를 갖고 있기 때문
 		if (!process_id)
 			continue;
 
@@ -169,6 +190,8 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "%s open error", buffer);
 			exit(1);
 		}
+
+		// 명령어, 상태, 그룹 아이디, 세션 아이디, foreground 그룹 아이디, cpu 사용 시간, 우선순위, 프로세서 등 추출
 		fscanf(fp, "%*d %s %c %*d %d %d", command, &status, &pgrp, &session_id);
 		fscanf(fp, "%*d %d %*d %*d %*d %*d %*d", &tpgid);
 		fscanf(fp, "%lu %lu %*d %*d", &utime, &stime);
@@ -179,6 +202,7 @@ int main(int argc, char **argv) {
 		// Byte -> KB 단위
 		virtual_memory /= 1024;
 
+		// page -> KB 단위
 		int page_size = getpagesize() / 1024;
 		resident_set_memory *= page_size;
 
@@ -188,6 +212,7 @@ int main(int argc, char **argv) {
 		t -= process_uptime;
 		struct tm tm = *localtime(&t);
 
+		// uid, euid, vmlck 여부 추출
 		strcat(buffer, "us");
 		fp = fopen(buffer, "r");
 		fscanf(fp, "%*s %[^\n]\n", command);
@@ -212,9 +237,6 @@ int main(int argc, char **argv) {
 		fscanf(fp, "%*s %d", &vmlck);
 		fclose(fp);
 
-		memset(tty, 0, sizeof(tty));
-		sprintf(buffer, "/proc/%d/fd/0", session_id);
-		
 		memset(process.status, 0, sizeof(process.status));
 		process.status[0] = status;
 
@@ -229,6 +251,8 @@ int main(int argc, char **argv) {
 			fscanf(fp, "%s", cpu_buf);
 			cp = cpu_buf + 3;
 			cpu_num = atoi(cp);
+
+			// 프로세스가 돌고 있는 프로세서의 총 동작 시간 추출
 			if (cpu_num == processor) {
 				fscanf(fp, "%d %d %d %d", &cpu_user, &cpu_nice, &cpu_system, &cpu_idle);
 				break;
@@ -236,9 +260,11 @@ int main(int argc, char **argv) {
 			fscanf(fp, "%*[^\n]");
 		}
 		fclose(fp);
-	
+
 		cpu_total = (cpu_user + cpu_system + cpu_nice + cpu_idle);
-	
+
+        memset(tty, 0, sizeof(tty));
+        sprintf(buffer, "/proc/%d/fd/0", session_id);
 		int pass_flag = 1;
 	
 		// 아무 옵션 없는 경우
@@ -254,12 +280,14 @@ int main(int argc, char **argv) {
 			}
 		}
 
+		// a, u 옵션 둘 중 하나라도 있는 경우
 		if (pass_flag && (a_opt || u_opt)) {
 			if (readlink(buffer, tty, sizeof(tty)) < 0) {
 				pass_flag = 1;
 			}
 			else if (!strcmp(tty, "/dev/null"))
 				pass_flag = 1;
+			// u옵션만 있는 경우 euid 가 같아야함
 			else if (!a_opt && u_opt && euid != root_euid)
 				pass_flag = 1;
 			else
@@ -270,16 +298,20 @@ int main(int argc, char **argv) {
 			if (readlink(buffer, tty, sizeof(tty)) < 0) {
 				pass_flag = 1;
 			}
+			// euid 가 같아야함
 			if (euid != root_euid)
 				pass_flag = 1;
 			else
 				pass_flag = 0;
 		}
 
+		// a, x 옵션 같이 있으면 모든 프로세스 출력
 		if (!(a_opt && x_opt) && pass_flag)
 			continue;
 
+		// 옵션이 하나라도 있는 경우
 		if (a_opt || x_opt || u_opt) {
+		    // 약식 명령어가 아닌 풀 명령어를 구해옴
 			char buf[COMMAND_SIZE];
 			sprintf(buffer, "/proc/%d/cmdline", process_id);
 			fp = fopen(buffer, "r");
@@ -290,6 +322,7 @@ int main(int argc, char **argv) {
 				if (status != 1)
 					break;
 
+				// 명령어와 아규먼트가 null문자로 구분되어 있어서 다음과 같이 추출함
 				for (int i = 0; i < sizeof(buffer); i++) {
 					if (buffer[i] == '\0') {
 						if (buffer[i + 1] == '\0')
@@ -304,9 +337,13 @@ int main(int argc, char **argv) {
 			}
 			fclose(fp);
 
+			// 풀 명령어가 존재하면 command 에 적용
 			if (strlen(buf) > 0) {
 				strcpy(command, buf);
-			} else {
+			}
+
+			// 존재하지 않으면 기존 명령어에 []를 붙여줌
+			else {
 				int length = strlen(command);
 				for (int i = length - 1; i >= 0; i--) {
 					command[i + 1] = command[i];
@@ -316,6 +353,7 @@ int main(int argc, char **argv) {
 				command[length + 2] = '\0';
 			}
 
+			// 백그라운드 스레드의 수를 셈
 			sprintf(buffer, "/proc/%d/task", process_id);
 			DIR *dp = opendir(buffer);
 			struct dirent *dir;
@@ -327,6 +365,7 @@ int main(int argc, char **argv) {
 				count++;
 			}
 
+			// STAT 부가 정보
 			if (nice < 0)
 				strcat(process.status, "<");
 
@@ -342,7 +381,6 @@ int main(int argc, char **argv) {
 			if (count > 1)
 				strcat(process.status, "l");
 
-			//printf("pid = %d pgrp =  %d tpgid = %d\n", process_id, pgrp, tpgid);
 			if (pgrp == tpgid)
 				strcat(process.status, "+");
 		}
@@ -370,6 +408,7 @@ int main(int argc, char **argv) {
 	}
 	closedir(dp);
 
+	// 출력
 	struct node *node = head;
 
 	if (user_flag)

@@ -55,7 +55,10 @@ int main(int argc, char* argv[]) {
 
 	FILE* fp;
 	if(argc == 2) {
-		fp = fopen(argv[1],"r");
+	    // 입력 파일이 있는 경우
+		fp = fopen(argv[1], "r");
+
+		// 파일이 없으면 에러
 		if(fp < 0) {
 			printf("File doesn't exists.");
 			return -1;
@@ -80,10 +83,9 @@ int main(int argc, char* argv[]) {
 
 		line[strlen(line)] = '\n'; //terminate with new line
 		tokens = tokenize(line);
-   
-       //do whatever you want with the commands, here we just print them
-		process(tokens);
 
+		// 명령어 처리
+		process(tokens);
 
 		// Freeing the allocated memory	
 		for(i=0;tokens[i]!=NULL;i++){
@@ -117,13 +119,15 @@ void process(char **tokens) {
 	while (1) {
 		p = has_pipe(tokens);
 
-		// 파이프가 있음
+		// 현재 명령어 뒤에 파이프가 있음
 		if (p != NULL) {
+		    // 파이프 생성
 			if (pipe(pipe_fd) < 0) {
 				fprintf(stderr, "pipe error\n");
 				exit(1);
 			}
 
+			// 현재 프로세스가 파이프 출력을 하도록 지정
 			output_pipe_fd = pipe_fd[1];
 			*p = NULL;
 			cur_pipe = 1;
@@ -137,11 +141,16 @@ void process(char **tokens) {
 		else if (!strcmp(tokens[0], "pps")) {
 			sprintf(tokens[0], "./pps");
 		}
-		
+
+		// 명령어 실행
 		run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
+
+		// ------------ 여기서부터 다음 명령어로 취급 ---------------- 즉. 윗줄에서의 "현재 명령어"는 "이전 명령어"로 명명됨
+		// 이전 명령어가 파이프를 가졌음을 표시. 이전 명령어가 파이프를 가졌으면 현재 명령어의 입력이 파이프가 되어야 하기 때문
 		prev_pipe = cur_pipe;
 		cur_pipe = 0;
 
+		// 다 사용한 파이프 파일은 닫아줌
 		if (input_pipe_fd != -1) {
 			close(input_pipe_fd);
 			input_pipe_fd = -1;
@@ -151,7 +160,8 @@ void process(char **tokens) {
 			close(output_pipe_fd);
 			output_pipe_fd = -1;
 		}
-		
+
+		// 남은 명령어가 없으면 종료
 		if (p == NULL)
 			break;
 
@@ -162,6 +172,11 @@ void process(char **tokens) {
 	return;
 }
 
+/**
+ * 파이프를 가졌는지 확인하는 함수
+ * @param tokens 명령어 토큰
+ * @return 가졌다면 토큰의 주소를 리턴, 없다면 NULL을 리턴
+ */
 char **has_pipe(char **tokens) {
 	while (*tokens != NULL) {
 		if (!strcmp(*tokens, "|"))
@@ -171,11 +186,19 @@ char **has_pipe(char **tokens) {
 	return NULL;
 }
 
+/**
+ * 명령어를 실행하는 함수
+ * @param op 명령어
+ * @param params 명령어에 전달될 아규먼트
+ * @param input_redirection 파이프 입력 재지정 여부 (자식 프로세스 기준)
+ * @param output_redirection 파이프 출력 재지정 여부 (자식 프로세스 기준)
+ * @param input_pipe_fd 재지정할 입력 파이프 file descriptor
+ * @param output_pipe_fd 재지정할 출력 파이프 file descriptor
+ */
 void run_op(const char *op, char **params, int input_redirection, int output_redirection, int input_pipe_fd, int output_pipe_fd) {
-	int background_flag;
-	char buffer[MAX_INPUT_SIZE];
 	int status;
-	
+
+	// 프로세스 생성
 	pid_t pid = fork();
 
 	// fork 에러
@@ -193,8 +216,11 @@ void run_op(const char *op, char **params, int input_redirection, int output_red
 		}
 
 		if (output_redirection) {
+		    // 출력 파이프 지정
 			dup2(output_pipe_fd, 1);
 		}
+
+		// 실행
 		status = execvp(op, params);
 		if (status < 0) {
 			fprintf(stderr, "SSUShell : Incorrect command\n");
