@@ -697,6 +697,10 @@ void data_refresh() {
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // kstkeip, signal, blocked, sigignore, sigcatch 
 			//fscanf(fp, "%*lu %*lu %*lu %*lu %*lu"); // wchan, nswap, cnswap, exit_signal, processor
 
+			// command 괄호 제거
+			strncpy(command, command + 1, strlen(command) - 1);
+			command[strlen(command) - 2] = '\0';
+
 			// Byte -> KB 단위
 			virtual_memory /= 1024;
 			fclose(fp);
@@ -721,9 +725,7 @@ void data_refresh() {
 				continue;
 
 			while (fscanf(fp, "%s", buffer) > 0) {
-				if (!strcmp(buffer, "Name:"))
-					fscanf(fp, "%[^\n]\n", command);
-				else if (!strcmp(buffer, "State:")) {
+				if (!strcmp(buffer, "State:")) {
 					fscanf(fp, " %c %*[^\n]\n", &status);
 				}
 				else if (!strcmp(buffer, "Uid:")) {

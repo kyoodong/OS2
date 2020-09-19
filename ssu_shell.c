@@ -239,5 +239,5 @@ void run_op(const char *op, char **params, int input_redirection, int output_red
 	wait(&status);
 
 	if (!WIFEXITED(status))
-		printf("SSUShell : Incorrect command\n");
+		fprintf(stderr, "SSUShell : Incorrect command\n");
 }
