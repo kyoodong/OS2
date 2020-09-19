@@ -80,6 +80,8 @@ int main(int argc, char* argv[]) {
 		}
 		//printf("Command entered: %s (remove this debug output later)\n", line);
 		/* END: TAKING INPUT */
+		if (strlen(line) == 0)
+			continue;
 
 		line[strlen(line)] = '\n'; //terminate with new line
 		tokens = tokenize(line);
