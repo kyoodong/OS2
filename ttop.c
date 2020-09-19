@@ -353,14 +353,10 @@ void print_sub() {
 		unsigned long t = node->process.time;
 		unsigned long min, sec, mils;
 
-		fprintf(stderr, "pid = %d\n", node->process.pid);
-		fprintf(stderr, "t = %lu ", t);
 		min = t / (hz * 60);
-		fprintf(stderr, "min = %lu t = %lu\t", min, t);
 		t %= (60 * hz);
 		sec = t / hz;
 		mils = t % hz;
-		fprintf(stderr, "sec = %lu mils = %lu\n", sec, mils);
 
 		sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
 		sprintf(buffer, "%6d%9s%8ld%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s\n",

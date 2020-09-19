@@ -92,6 +92,7 @@ int main(int argc, char **argv) {
 	unsigned long utime, stime;
 	int cpu_user, cpu_nice, cpu_system, cpu_idle;
 	int cpu_total, mem_total;
+	struct winsize w;
 
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 	width = w.ws_col;
