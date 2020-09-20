@@ -271,6 +271,7 @@ void print_main() {
 			cpu_average_mean_for_1min,
 			cpu_average_mean_for_5min,
 			cpu_average_mean_for_15min);
+	buffer[width - 1] = '\n';
 
 	buffer[width] = '\0';
 	mvwprintw(main_window, 0, 0, buffer); 
@@ -281,6 +282,7 @@ void print_main() {
 			sleeping_process_count,
 			stopped_process_count,
 			zombie_process_count);
+	buffer[width - 1] = '\n';
 	buffer[width] = '\0';
 	printw(buffer);
 
@@ -297,22 +299,25 @@ void print_main() {
 			(float) (cpu_softirq - old_cpu_softirq) / diff * 100,
 			(float) (cpu_steal - old_cpu_steal) / diff * 100
 	);
+	buffer[width - 1] = '\n';
 	buffer[width] = '\0';
 	printw(buffer);
 
 	sprintf(buffer, "KiB Mem : %8d total, %8d free, %8d used, %8d buff/cache\n",
 			mem_total, mem_free, mem_total - (mem_free + mem_buffer + mem_cache + mem_kreclaimable), mem_buffer + mem_cache + mem_kreclaimable);
+	buffer[width - 1] = '\n';
 	buffer[width] = '\0';
 	printw(buffer);
 
 	sprintf(buffer, "KiB Swap: %8d total, %8d free, %8d used, %8d avail Mem\n",
 			swap_total, swap_free, swap_total - swap_free, mem_available);
+	buffer[width - 1] = '\n';
 	buffer[width] = '\0';
 	printw(buffer);
 
-	buffer[0] = '\0';
 	sprintf(buffer, "\n%6s%9s%8s%5s%11s%8s%8s %1s%7s%7s%10s COMMAND\n",
-			"PID", "USER", "PR", "NI", "VIRT", "RES", "SHR", "S", "%%CPU", "%%MEM", "TIME+");
+			"PID", "USER", "PR", "NI", "VIRT", "RES", "SHR", "S", "%%CPU", "%MEM", "TIME+");
+	buffer[width - 1] = '\n';
 	buffer[width] = '\0';
 	printw(buffer);
 	wrefresh(main_window);
@@ -346,7 +351,7 @@ void print_sub() {
 	werase(sub_window);
 
 	// 출력
-	for (int i = 0; i < sub_height-1; i++) {
+	for (int i = 0; i < sub_height - 1; i++) {
 		if (node->next == NULL)
 			break;
 
@@ -403,7 +408,7 @@ void print_sub() {
 			time_buffer,
 			node->process.command
 	);
-	buffer[sub_width] = '\0';
+	buffer[sub_width - 1] = '\0';
 	wprintw(sub_window, buffer);
 
 	wrefresh(sub_window);
@@ -470,7 +475,7 @@ int main(int argc, char **argv) {
 	print_main();
 
 	// 서브 윈도우 생성
-	sub_window = subwin(main_window, height - 7, width, y, x);
+	sub_window = subwin(main_window, height - y, width, y, x);
 
 	// 키보드 입력 이벤트 등록
 	keypad(stdscr, TRUE);
@@ -510,7 +515,7 @@ int main(int argc, char **argv) {
             print_main();
 
 			// 스크롤 가능한지 검사
-			for (int i = 0; i < sub_height; i++) {
+			for (int i = 0; i < sub_height - 1; i++) {
 				if (node == NULL)
 					break;
 				node = node->next;
