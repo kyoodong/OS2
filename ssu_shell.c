@@ -119,7 +119,7 @@ void process(char **tokens) {
 	int input_pipe_fd = -1, output_pipe_fd = -1;
 
 	while (1) {
-		if (tokens[0] == NULL) {
+		if (tokens[0] == NULL || !strcmp(tokens[0], "|")) {
 			fprintf(stderr, "SSUShell : Incorrect command\n");
 			break;
 		}
