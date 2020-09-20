@@ -346,6 +346,7 @@ void print_sub() {
 
 	char buffer[1024];
 	char time_buffer[12];
+	char priority_buffer[12];
 	node = top;
 	wmove(sub_window, 0, 0);
 	werase(sub_window);
@@ -364,10 +365,16 @@ void print_sub() {
 		mils = t % hz;
 
 		sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
-		sprintf(buffer, "%6d%9s%8ld%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s\n",
+		if (node->process.priority <= -100) {
+			sprintf(priority_buffer, "rt");
+		}
+		else {
+			sprintf(priority_buffer, "%ld", node->process.priority);
+		}
+		sprintf(buffer, "%6d%9s%8s%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s\n",
 				node->process.pid,
 				node->process.user,
-				node->process.priority,
+				priority_buffer,
 				node->process.nice,
 				node->process.virtual_memory,
 				node->process.resident_set_memory,
@@ -393,11 +400,17 @@ void print_sub() {
 	sec = t / hz;
 	mils = t % hz;
 
+	if (node->process.priority <= -100) {
+		sprintf(priority_buffer, "rt");
+	}
+	else {
+		sprintf(priority_buffer, "%ld", node->process.priority);
+	}
 	sprintf(time_buffer, "%lu:%02lu.%02lu", min, sec, mils);
-	sprintf(buffer, "%6d%9s%8ld%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s",
+	sprintf(buffer, "%6d%9s%8s%5ld%11lu%8ld%8ld %c%6.1f%6.1f%10s %s",
 			node->process.pid,
 			node->process.user,
-			node->process.priority,
+			priority_buffer,
 			node->process.nice,
 			node->process.virtual_memory,
 			node->process.resident_set_memory,
@@ -771,7 +784,7 @@ void data_refresh() {
 			if (pw != NULL) {
 			    // 이름 길이 제한
 				strncpy(process.user, pw->pw_name, 8);
-				if (strlen(process.user) > sizeof(process.user)) {
+				if (strlen(pw->pw_name) > sizeof(process.user)) {
 					process.user[7] = '+';
 					process.user[8] = '\0';
 				}
