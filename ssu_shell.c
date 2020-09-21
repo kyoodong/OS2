@@ -48,6 +48,18 @@ char **tokenize(char *line)
 
 
 int main(int argc, char* argv[]) {
+	char cwd[1024];
+	char buffer[1024];
+	getcwd(cwd, 1024);
+	char *path = getenv("PATH");
+	sprintf(buffer, "%s:%s", path, cwd);
+	setenv("PATH", buffer, 1);
+
+	strcpy(path, buffer);
+	realpath(argv[0], cwd);
+	*strrchr(cwd, '/') = '\0';
+	sprintf(buffer, "%s:%s", path, cwd);
+	setenv("PATH", buffer, 1);
 
 	char  line[MAX_INPUT_SIZE];            
 	char  **tokens;              
@@ -139,16 +151,6 @@ void process(char **tokens) {
 			*p = NULL;
 			cur_pipe = 1;
 		}
-		// ttop 명령어
-		if (!strcmp(tokens[0], "ttop")) {
-			sprintf(tokens[0], "./ttop");
-		}
-		
-		// pps 명령어
-		else if (!strcmp(tokens[0], "pps")) {
-			sprintf(tokens[0], "./pps");
-		}
-
 		// 명령어 실행
 		run_op(tokens[0], tokens, prev_pipe, cur_pipe, input_pipe_fd, output_pipe_fd);
 
